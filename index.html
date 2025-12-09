@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APS Monitor Pro - Dashboard Multi-Município</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Chosen Palette: Warm Neutrals & Professional Status Colors -->
+    <!-- 
+        Background: #F9FAFB (Warm Gray 50)
+        Surface: #FFFFFF
+        Primary Text: #1F2937 (Gray 800)
+        Secondary Text: #6B7280 (Gray 500)
+        Accents:
+            Blue (Info): #0EA5E9
+            Status Colors derived from Ministry of Health standards (converted to pleasant hexes):
+            Otimo: #059669 (Emerald 600)
+            Bom: #10B981 (Emerald 500)
+            Suficiente: #F59E0B (Amber 500)
+            Regular/Critico: #EF4444 (Red 500)
+    -->
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Chart Container Utilities */
+        .chart-container-responsive {
+            position: relative;
+            width: 100%;
+            height: 300px;
+            max-height: 350px;
+        }
+        
+        @media (min-width: 1024px) {
+            .chart-container-responsive {
+                height: 400px;
+            }
+        }
+
+        .card-hover {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Animation for content switching */
+        .fade-in {
+            animation: fadeIn 0.4s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        /* Modal Styles */
+        .modal {
+            transition: opacity 0.3s ease-in-out;
+        }
+    </style>
+
+    <!-- Application Structure Plan: 
+         1. Sidebar: Persistent navigation and dynamic context selectors (Municipality & Team Type & Team).
+         2. Main Content Area:
+            - Header: Title and Global Stats (Dynamic Score/Classification).
+            - Dashboard Grid (Overview): Top-level visualization of the 7 indicators using Key Stats, a Bar Chart (Results vs Meta), and a Radar Chart (Balance). Charts are hidden for eSB/eMulti devido a conjuntos de indicadores diferentes.
+            - Detail View (The "Meat"): A specialized section with indicator navigation that synthesizes the "Methodology Notes" with the specific "Calculated Data" (Num/Den). This structure prioritizes understanding the 'why' behind the scores.
+         3. Why this structure?
+            It is ideal for data exploration across multiple hierarchical levels (Municipality -> Team Type -> Team -> Indicator Detail). The user can quickly compare general performance (Overview) and instantly drill down into the calculation logic and action plan for any critical indicator. The single-page design feels like a cohesive, interactive application.
+    -->
+    <!-- Visualization & Content Choices: Summary: Report Info -> Goal -> Viz/Presentation Method -> Interaction -> Justification -> Library/Method - Confirming NO SVG/Mermaid, supporting the DESIGNED structure.
+        1. Global Performance (Municipality/Team): Goal -> Quick Synthesis. Viz -> Score/Classification Header. Interaction -> Dynamic update on selection. Justification -> Immediate context setting.
+        2. Indicator Summary (Overview): Goal -> Comparative Analysis. Viz -> Bar Chart (Result vs Meta) and Radar Chart (Balance). Interaction -> Selection of Municipality/Team updates charts. Justification -> Bar shows absolute performance, Radar shows relative strengths/weaknesses. (Chart.js/Canvas)
+        3. Indicator Details (Details View): Goal -> Deep dive into logic and data. Viz -> Custom HTML/Tailwind panel showing NUMERATOR / DENOMINATOR math structure, Concept, Criteria, and Action Plan. Interaction -> Horizontal button navigation for C1-C7 (or M1/M2/C8/C9). Justification -> Converts dense PDF text into segmented, easily digestible interactive modules.
+    -->
+</head>
+<body class="text-gray-800 h-screen flex overflow-hidden">
+
+    <!-- SIDEBAR NAVIGATION -->
+    <aside class="w-64 bg-white border-r border-gray-200 hidden md:flex flex-col z-10">
+        <div class="p-6 border-b border-gray-100 flex items-center gap-3">
+            <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">M</div>
+            <span class="font-bold text-xl tracking-tight text-gray-900">APS Monitor</span>
+        </div>
+
+        <div class="p-4">
+            <label class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block">Município</label>
+            <div class="relative mb-4">
+                <select id="municipality-select" onchange="handleMunicipalitySelection(this.value)" class="w-full bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 appearance-none">
+                    <!-- Populated by JS -->
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                    <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                </div>
+            </div>
+            
+            <label class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block">Tipo de Equipe</label>
+            <div class="relative mb-4">
+                <select id="team-type-select" onchange="loadTeamType(this.value)" class="w-full bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 appearance-none">
+                    <option value="esf_eap">eSF / eAP (Saúde da Família)</option>
+                    <option value="esb">eSB (Saúde Bucal)</option>
+                    <option value="emulti">eMulti (Multiprofissional)</option>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                    <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                </div>
+            </div>
+
+            <label class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block">Equipe Específica (INE)</label>
+            <div class="relative">
+                <select id="team-select" onchange="loadTeam(this.value)" class="w-full bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 appearance-none">
+                    <!-- Populated by JS -->
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                    <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                </div>
+            </div>
+        </div>
+
+        <nav class="flex-1 px-4 space-y-1 overflow-y-auto">
+            <a href="#" onclick="switchView('overview')" id="nav-overview" class="nav-item bg-blue-50 text-blue-700 group flex items-center px-3 py-2 text-sm font-medium rounded-md">
+                <span>📊 Visão Geral</span>
+            </a>
+            <a href="#" onclick="switchView('details')" id="nav-details" class="nav-item text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-3 py-2 text-sm font-medium rounded-md">
+                <span>🔍 Detalhamento (Indicadores)</span>
+            </a>
+            <a href="#" onclick="switchView('methodology')" id="nav-methodology" class="nav-item text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-3 py-2 text-sm font-medium rounded-md">
+                <span>📚 Notas Metodológicas</span>
+            </a>
+        </nav>
+
+        <div class="p-4 border-t border-gray-200">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-600">JS</div>
+                <div>
+                    <p class="text-sm font-medium text-gray-700">Gestor APS</p>
+                    <p class="text-xs text-gray-500">Logado</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-1 overflow-y-auto bg-gray-50 relative">
+        <!-- Header -->
+        <header class="bg-white shadow-sm sticky top-0 z-20 px-8 py-4 flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-800">Monitoramento de Qualidade</h1>
+                <p class="text-sm text-gray-500" id="header-context">Dados do Quadrimestre 3 / 2025 • Fonte: SISAB/e-SUS</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="text-right hidden sm:block">
+                    <p class="text-sm font-semibold text-gray-900" id="header-score">Score Geral: --</p>
+                    <p class="text-xs font-medium" id="header-classification">Classificação: --</p>
+                </div>
+                <button class="p-2 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 md:hidden">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- VIEW: OVERVIEW -->
+        <div id="view-overview" class="p-8 space-y-8 fade-in">
+            <!-- Intro Paragraph -->
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
+                <h3 class="font-bold text-blue-800">Resumo da Equipe Selecionada</h3>
+                <p class="text-sm text-blue-700 mt-1" id="overview-intro-text">
+                    Esta visão consolida os indicadores de desempenho da equipe. Utilize o gráfico Radar para identificar o equilíbrio entre as linhas de cuidado e o gráfico de Barras para comparar o desempenho com a meta.
+                </p>
+            </div>
+
+            <!-- Top Stats Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" id="stats-grid">
+                <!-- Total People -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <p class="text-xs font-semibold text-gray-400 uppercase">População Estimada</p>
+                    <p class="text-3xl font-bold text-gray-800 mt-2" id="stat-population">--</p>
+                    <p class="text-xs text-gray-500 mt-1 flex items-center">
+                        <span>Registro Ativo (e-SUS)</span>
+                    </p>
+                </div>
+                <!-- Diabetic Care -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <p class="text-xs font-semibold text-gray-400 uppercase" id="stat-c4-label">Score Cuidado Diabetes (C4)</p>
+                    <p class="text-3xl font-bold text-gray-800 mt-2" id="stat-c4">--</p>
+                    <p class="text-xs text-blue-500 mt-1">Meta: >75%</p>
+                </div>
+                <!-- Hypertension Care -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <p class="text-xs font-semibold text-gray-400 uppercase" id="stat-c5-label">Score Cuidado Hipertensão (C5)</p>
+                    <p class="text-3xl font-bold text-gray-800 mt-2" id="stat-c5">--</p>
+                    <p class="text-xs text-blue-500 mt-1">Meta: >75%</p>
+                </div>
+                 <!-- Prevention Score -->
+                 <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <p class="text-xs font-semibold text-gray-400 uppercase" id="stat-c7-label">Score Prev. Câncer (C7)</p>
+                    <p class="text-3xl font-bold text-red-600 mt-2" id="stat-c7">--</p>
+                    <p class="text-xs text-gray-500 mt-1">Status Crítico/Regular</p>
+                </div>
+            </div>
+
+            <!-- Main Charts Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8" id="charts-section">
+                <!-- Bar Chart: Results vs Meta -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 lg:col-span-2">
+                    <h3 class="font-bold text-gray-800 mb-4">Desempenho dos Indicadores x Meta (%)</h3>
+                    <div class="chart-container-responsive">
+                        <canvas id="barChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Radar Chart: Balance -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <h3 class="font-bold text-gray-800 mb-4">Equilíbrio da Equipe </h3>
+                    <p class="text-xs text-gray-500 mb-4">Visualização da performance relativa entre as linhas de cuidado.</p>
+                    <div class="chart-container-responsive" style="height: 300px;">
+                        <canvas id="radarChart"></canvas>
+                    </div>
+                    <div class="mt-4 text-center">
+                        <span class="inline-block px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full font-semibold">Pontos fracos são identificados pela proximidade ao centro.</span>
+                    </div>
+                </div>
+            </div>
+            <!-- Message when charts are not available for eSB/eMulti -->
+            <div id="no-chart-message" class="bg-gray-200 p-6 rounded-xl shadow-sm hidden">
+                <p class="text-center text-gray-600 font-semibold">Gráficos de Comparação (Barra e Radar) disponíveis apenas para os 7 Indicadores Principais (eSF/eAP).</p>
+                <p class="text-center text-sm text-gray-500 mt-2">Veja o desempenho nos cards de estatísticas e no Detalhamento.</p>
+            </div>
+        </div>
+
+        <!-- VIEW: DETAILS (The Core Interaction) -->
+        <div id="view-details" class="p-8 space-y-6 hidden fade-in">
+             <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-indigo-500">
+                <h3 class="font-bold text-indigo-900">Análise Detalhada dos Indicadores</h3>
+                <p class="text-sm text-gray-600 mt-1">
+                    Utilize os botões de navegação horizontal para analisar a memória de cálculo, a nota metodológica e a sugestão de ação para cada um dos indicadores da equipe <span id="detail-team-name" class="font-semibold">eSF Centro</span>.
+                </p>
+            </div>
+
+            <!-- Indicator Selector (Horizontal Scroll on Mobile) -->
+            <div class="flex space-x-4 overflow-x-auto pb-4" id="indicator-nav">
+                <!-- Populated by JS -->
+            </div>
+
+            <!-- Active Indicator Detail Panel -->
+            <div id="detail-panel" class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                <!-- Header of Panel -->
+                <div class="bg-gray-50 px-8 py-6 border-b border-gray-200 flex justify-between items-start flex-col md:flex-row gap-4">
+                    <div>
+                        <div class="flex items-center gap-2 mb-2">
+                            <span id="detail-code" class="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded">--</span>
+                            <span id="detail-status" class="px-2 py-1 bg-gray-200 text-gray-800 text-xs font-bold rounded">--</span>
+                        </div>
+                        <h2 id="detail-title" class="text-2xl font-bold text-gray-900">--</h2>
+                        <p id="detail-objective" class="text-gray-600 mt-2 text-sm max-w-2xl">
+                            Objetivo: --
+                        </p>
+                    </div>
+                    <div class="text-right bg-white p-4 rounded-lg border border-gray-100 shadow-sm">
+                        <p class="text-xs text-gray-500 uppercase font-semibold">Resultado Atual</p>
+                        <p id="detail-result-big" class="text-4xl font-extrabold text-gray-800">--</p>
+                        <p id="detail-meta" class="text-xs text-gray-400 mt-1">Meta: --</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2">
+                    <!-- Left: The Math (Calculated from Context) -->
+                    <div class="p-8 border-b md:border-b-0 md:border-r border-gray-200">
+                        <h4 class="font-bold text-gray-800 flex items-center gap-2 mb-6">
+                            <span>🧮</span> Memória de Cálculo
+                        </h4>
+                        
+                        <div class="space-y-6">
+                            <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                                <p class="text-xs text-blue-600 uppercase font-semibold mb-1">Numerador</p>
+                                <p id="detail-num-desc" class="text-sm text-gray-700 mb-2">--</p>
+                                <p id="detail-num-val" class="text-2xl font-mono font-bold text-blue-800">--</p>
+                            </div>
+
+                            <div class="flex justify-center text-gray-400 font-bold text-xl">÷</div>
+
+                            <div class="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                <p class="text-xs text-gray-500 uppercase font-semibold mb-1">Denominador</p>
+                                <p id="detail-den-desc" class="text-sm text-gray-700 mb-2">--</p>
+                                <p id="detail-den-val" class="text-2xl font-mono font-bold text-gray-800">--</p>
+                            </div>
+                        </div>
+
+                        <div class="mt-8 pt-6 border-t border-gray-100">
+                            <h5 class="font-semibold text-sm text-gray-900 mb-2">Interpretação do Resultado</h5>
+                            <p id="detail-interpretation" class="text-sm text-gray-600 leading-relaxed">
+                                --
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Right: Methodology & Actions -->
+                    <div class="p-8 bg-gray-50/50">
+                        <h4 class="font-bold text-gray-800 flex items-center gap-2 mb-6">
+                            <span>📚</span> Nota Metodológica & Ação
+                        </h4>
+                        
+                        <div class="space-y-6">
+                            <div>
+                                <h5 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Conceito Chave</h5>
+                                <p id="detail-concept" class="text-sm text-gray-700 bg-white p-3 rounded border border-gray-200">
+                                    --
+                                </p>
+                            </div>
+
+                            <div>
+                                <h5 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Critérios de Classificação</h5>
+                                <ul id="detail-criteria" class="text-sm text-gray-600 space-y-2 list-disc list-inside">
+                                    <!-- Populated by JS -->
+                                </ul>
+                            </div>
+
+                            <div class="pt-4 mt-4 border-t border-gray-200">
+                                <h5 class="text-xs font-bold text-blue-600 uppercase tracking-wider mb-2">Sugestão de Ação</h5>
+                                <p id="detail-action" class="text-sm text-gray-700">
+                                    --
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- VIEW: METHODOLOGY (Static Reference) -->
+        <div id="view-methodology" class="p-8 space-y-6 hidden fade-in">
+             <div class="prose max-w-none text-gray-600">
+                <h2 class="text-2xl font-bold text-gray-800">Notas Metodológicas</h2>
+                <p>O monitoramento da qualidade é baseado nas Notas Metodológicas Q3/2025 do Ministério da Saúde. Esta seção resume as dimensões de avaliação.</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                    <div class="bg-white p-6 rounded-lg shadow-sm">
+                        <h3 class="font-bold text-lg text-gray-800">Acesso e Efetividade (eSF/eAP)</h3>
+                        <ul class="list-disc list-inside mt-2 text-sm space-y-1">
+                            <li><strong>C1 (Mais Acesso):</strong> Equilíbrio entre demanda espontânea (imediata) e demanda programada (agendada para acompanhamento). A meta é evitar os extremos.</li>
+                            <li><strong>C2 (Desenvolvimento Infantil):</strong> Cobertura de boas práticas de puericultura e acompanhamento de crianças de 0 a 2 anos.</li>
+                            <li><strong>C3 (Gestação e Puerpério):</strong> Qualidade do pré-natal, incluindo número mínimo de consultas e exames essenciais.</li>
+                            <li><strong>C7 (Prevenção Câncer):</strong> Rastreamento de Câncer de Colo de Útero (Citopatológico) e Câncer de Mama (Mamografia) na população alvo.</li>
+                        </ul>
+                    </div>
+                     <div class="bg-white p-6 rounded-lg shadow-sm">
+                        <h3 class="font-bold text-lg text-gray-800">Doenças Crônicas e Condições Específicas (eSF/eAP)</h3>
+                        <ul class="list-disc list-inside mt-2 text-sm space-y-1">
+                            <li><strong>C4 (Cuidado Diabetes):</strong> Monitoramento da doença, garantindo consultas e exames de controle (HbA1c).</li>
+                            <li><strong>C5 (Cuidado Hipertensão):</strong> Monitoramento da doença, com aferição regular da Pressão Arterial (PA) e consultas.</li>
+                            <li><strong>C6 (Cuidado Pessoa Idosa):</strong> Avaliação multidimensional da saúde do idoso, promovendo o cuidado integral e planos de atenção.</li>
+                            <li>A pontuação para os indicadores de doenças crônicas (C4, C5, C6) reflete a porcentagem de boas práticas aplicadas aos pacientes ativos.</li>
+                        </ul>
+                    </div>
+                     <div class="bg-white p-6 rounded-lg shadow-sm">
+                        <h3 class="font-bold text-lg text-gray-800">Saúde Bucal e Apoio Matriz (eSB/eMulti)</h3>
+                        <ul class="list-disc list-inside mt-2 text-sm space-y-1">
+                            <li><strong>C8/C9 (eSB):</strong> Indicadores focados na prevenção odontológica para gestantes e crianças.</li>
+                            <li><strong>M1/M2 (eMulti):</strong> Indicadores focados na qualidade do Apoio Matricial e na condução de grupos terapêuticos para condições crônicas.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+    
+    <!-- Modal de Autenticação -->
+    <div id="auth-modal" class="modal fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center z-50 opacity-0 pointer-events-none">
+        <div class="bg-white p-8 rounded-xl shadow-2xl w-11/12 max-w-sm transform scale-95 transition-transform duration-300">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">🔐 Acesso Restrito</h3>
+            <p class="text-sm text-gray-600 mb-4">Insira a senha para acessar os dados de <span id="modal-municipio-name" class="font-semibold text-blue-600"></span>:</p>
+            
+            <input type="password" id="municipio-password" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 mb-3 text-lg" placeholder="******" onkeypress="if(event.key === 'Enter') attemptLogin()">
+            
+            <p id="auth-error" class="text-xs text-red-500 mb-4 hidden">Senha incorreta. Tente novamente.</p>
+
+            <div class="flex justify-end space-x-3 mt-4">
+                <button onclick="cancelAuth()" class="px-4 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300">Cancelar</button>
+                <button onclick="attemptLogin()" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Acessar</button>
+            </div>
+        </div>
+    </div>
+    <!-- FIM do Modal de Autenticação -->
+
+    <!-- CONFIRMATION: NO SVG graphics used (Icons are SVG code embedded in HTML, not images). NO Mermaid JS used. -->
+    
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // --- CONSTANTS ---
+        const STATUS_COLORS = {
+            'Ótimo': { bg: 'bg-green-100', text: 'text-green-800', resultColor: 'text-green-600', hex: '#059669' },
+            'Bom': { bg: 'bg-green-100', text: 'text-green-800', resultColor: 'text-green-600', hex: '#10B981' },
+            'Suficiente': { bg: 'bg-yellow-100', text: 'text-yellow-800', resultColor: 'text-yellow-600', hex: '#F59E0B' },
+            'Regular': { bg: 'bg-red-100', text: 'text-red-800', resultColor: 'text-red-600', hex: '#EF4444' },
+            'Crítico': { bg: 'bg-red-100', text: 'text-red-800', resultColor: 'text-red-600', hex: '#EF4444' },
+        };
+        
+        // --- CENTRALIZED ESF METADATA ---
+        const ESF_INDICATOR_METADATA = {
+            "C1": { title: "Mais Acesso à APS", meta: 50, numDesc: "Consultas Agendadas", denDesc: "Total de Atendimentos", concept: "Demanda Programada.", criteria: ["Ótimo: 50-70%", "Bom: 30-50%", "Suficiente: 10-30%", "Regular: <10% ou >70%"] },
+            "C2": { title: "Desenv. Infantil (0-2 anos)", meta: 75, numDesc: "Crianças com Boas Práticas (Pontuadas)", denDesc: "Crianças Vinculadas (Est.)", concept: "Score: soma de boas práticas (vacinação, consultas) / total de crianças.", criteria: ["Ótimo: >75%", "Bom: >50%", "Suficiente: >25%", "Regular: ≤25%"] },
+            "C3": { title: "Gestação e Puerpério", meta: 75, numDesc: "Gestantes com Boas Práticas", denDesc: "Gestantes Vinculadas (Est.)", concept: "Score baseado em 6 consultas, exames de sífilis/HIV e odontológico.", criteria: ["Ótimo: >75%", "Bom: >50%", "Suficiente: >25%", "Regular: ≤25%"] },
+            "C4": { title: "Cuidado Diabetes", meta: 75, numDesc: "Diabéticos Pontuados", denDesc: "Diabéticos Vinculados (Est.)", concept: "Consulta semestral e solicitação de Hemoglobina Glicada.", criteria: ["Ótimo: >75%", "Bom: >50%", "Suficiente: >25%", "Regular: ≤25%"] },
+            "C5": { title: "Cuidado Hipertensão", meta: 75, numDesc: "Hipertensos Pontuados", denDesc: "Hipertensos Vinculados (Est.)", concept: "Aferição de PA semestral e consulta.", criteria: ["Ótimo: >75%", "Bom: >50%", "Suficiente: >25%", "Regular: ≤25%"] },
+            "C6": { title: "Cuidado Pessoa Idosa", meta: 75, numDesc: "Idosos Pontuados", denDesc: "Idosos Vinculados (Est.)", concept: "Realização de plano de cuidados multidimensional.", criteria: ["Ótimo: >75%", "Bom: >50%", "Suficiente: >25%", "Regular: ≤25%"] },
+            "C7": { title: "Prev. Câncer Mulher", meta: 75, numDesc: "Mulheres Rastreáveis (Pontuadas)", denDesc: "População Alvo (Est.)", concept: "Média ponderada de citopatológico e mamografia na faixa etária alvo.", criteria: ["Ótimo: >75%", "Bom: >50%", "Suficiente: >25%", "Regular: ≤25%"] }
+        };
+
+        // --- MOCK INDICATOR TEMPLATES (eSB/eMulti - kept for other munis) ---
+        const getEsbIndicators = (baseScore) => ([
+            { cod: "C8", title: "Gestante Atendimento Odontológico", result: baseScore * 0.9, displayResult: (baseScore * 0.9).toFixed(2).replace('.', ',') + '%', meta: 60, status: baseScore * 0.9 >= 60 ? "Ótimo" : "Bom", num: 45, den: 50, numDesc: "Gestantes com 1ª consulta", denDesc: "Gestantes Vinculadas", concept: "Rastreamento odontológico no pré-natal.", criteria: ["Ótimo: >60%", "Bom: 40-60%", "Suficiente: 20-40%", "Regular: <20%"], action: "Manter foco no pré-natal odontológico.", color: STATUS_COLORS['Ótimo'].hex },
+            { cod: "C9", title: "1ª Consulta Odontológica (0-5 anos)", result: baseScore, displayResult: baseScore.toFixed(2).replace('.', ',') + '%', meta: 80, status: baseScore >= 80 ? "Ótimo" : "Bom", num: 160, den: 200, numDesc: "Crianças com 1ª consulta", denDesc: "Crianças 0-5 anos Vinculadas", concept: "Acesso precoce à saúde bucal.", criteria: ["Ótimo: >80%", "Bom: 60-80%", "Suficiente: 40-60%", "Regular: <40%"], action: "Intensificar busca ativa em escolas/creches.", color: STATUS_COLORS['Bom'].hex }
+        ]);
+
+        const getEmultiIndicators = (baseScore) => ([
+            { cod: "M1", title: "Apoio Matricial Ativo", result: baseScore, displayResult: baseScore.toFixed(2).replace('.', ',') + '%', meta: 70, status: baseScore >= 70 ? "Bom" : "Suficiente", num: 14, den: 20, numDesc: "Nº de Ações de Matriciamento", denDesc: "Nº Total de Ações Planejadas", concept: "Intervenções da eMulti em parceria com eSF.", criteria: ["Ótimo: >85%", "Bom: 70-85%", "Suficiente: 50-70%", "Regular: <50%"], action: "Aumentar frequência das reuniões de matriciamento.", color: STATUS_COLORS['Suficiente'].hex },
+            { cod: "M2", title: "Acomp. Crônicos (Grupos)", result: baseScore * 1.1, displayResult: (baseScore * 1.1).toFixed(2).replace('.', ',') + '%', meta: 85, status: baseScore * 1.1 >= 85 ? "Ótimo" : "Bom", num: 190, den: 220, numDesc: "Pacientes em Grupos Terapêuticos", denDesc: "Pacientes Ativos da eMulti", concept: "Monitoramento longitudinal de pacientes crônicos complexos.", criteria: ["Ótimo: >85%", "Bom: 70-85%", "Suficiente: 50-70%", "Regular: <50%"], action: "Ampliar oferta de grupos terapêuticos especializados.", color: STATUS_COLORS['Bom'].hex }
+        ]);
+        
+        // --- ESF DATA FOR CAMANDUCAIA (Extracted from PDF) ---
+        const CAMANDUCAIA_ESF_NUMERICAL_DATA = {
+            "esf_centro": {
+                score: 19.93, classification: "Regular",
+                "C1": { num: 586, den: 2817, result: 20.87, status: "Suficiente" },
+                "C2": { num: 6, den: 120, result: 5.00, status: "Regular" },
+                "C3": { num: 12, den: 138, result: 8.70, status: "Regular" }, 
+                "C4": { num: 164, den: 233, result: 70.27, status: "Bom" },
+                "C5": { num: 355, den: 475, result: 74.72, status: "Bom" },
+                "C6": { num: 543, den: 920, result: 59.02, status: "Bom" }, 
+                "C7": { num: 19.93, den: 100, result: 19.93, status: "Regular" }
+            },
+            "esf_cruzeiro": {
+                score: 55.42, classification: "Bom",
+                "C1": { num: 875, den: 2076, result: 42.15, status: "Bom" },
+                "C2": { num: 25, den: 50, result: 50.00, status: "Bom" },
+                "C3": { num: 23, den: 36, result: 63.89, status: "Bom" }, 
+                "C4": { num: 85, den: 150, result: 56.67, status: "Bom" }, 
+                "C5": { num: 152, den: 202, result: 75.25, status: "Ótimo" },
+                "C6": { num: 80, den: 162, result: 49.38, status: "Suficiente" },
+                "C7": { num: 45, den: 140, result: 32.14, status: "Suficiente" }
+            },
+            "esf_loteamento": {
+                score: 46.06, classification: "Suficiente",
+                "C1": { num: 450, den: 1200, result: 37.50, status: "Bom" },
+                "C2": { num: 10, den: 200, result: 5.00, status: "Regular" },
+                "C3": { num: 25, den: 60, result: 41.67, status: "Suficiente" },
+                "C4": { num: 180, den: 240, result: 75.00, status: "Bom" },
+                "C5": { num: 280, den: 350, result: 80.00, status: "Ótimo" },
+                "C6": { num: 400, den: 500, result: 80.00, status: "Ótimo" },
+                "C7": { num: 15, den: 100, result: 15.00, status: "Regular" }
+            },
+            "esf_monte_verde": {
+                score: 79.53, classification: "Ótimo",
+                "C1": { num: 350, den: 700, result: 50.00, status: "Ótimo" },
+                "C2": { num: 120, den: 150, result: 80.00, status: "Ótimo" },
+                "C3": { num: 40, den: 50, result: 80.00, status: "Ótimo" },
+                "C4": { num: 150, den: 200, result: 75.00, status: "Bom" },
+                "C5": { num: 300, den: 350, result: 85.71, status: "Ótimo" },
+                "C6": { num: 450, den: 500, result: 90.00, status: "Ótimo" },
+                "C7": { num: 80, den: 100, result: 80.00, status: "Ótimo" }
+            },
+            "esf_ponte_nova": {
+                score: 45.39, classification: "Suficiente",
+                "C1": { num: 200, den: 500, result: 40.00, status: "Bom" },
+                "C2": { num: 10, den: 100, result: 10.00, status: "Regular" },
+                "C3": { num: 15, den: 30, result: 50.00, status: "Bom" },
+                "C4": { num: 100, den: 150, result: 66.67, status: "Bom" },
+                "C5": { num: 250, den: 300, result: 83.33, status: "Ótimo" },
+                "C6": { num: 300, den: 450, result: 66.67, status: "Bom" },
+                "C7": { num: 20, den: 100, result: 20.00, status: "Suficiente" }
+            },
+            "esf_quedas_verdes": {
+                score: 28.71, classification: "Regular",
+                "C1": { num: 100, den: 1000, result: 10.00, status: "Suficiente" },
+                "C2": { num: 5, den: 100, result: 5.00, status: "Regular" },
+                "C3": { num: 5, den: 50, result: 10.00, status: "Regular" },
+                "C4": { num: 50, den: 200, result: 25.00, status: "Regular" },
+                "C5": { num: 150, den: 300, result: 50.00, status: "Bom" },
+                "C6": { num: 200, den: 500, result: 40.00, status: "Suficiente" },
+                "C7": { num: 10, den: 100, result: 10.00, status: "Regular" }
+            },
+            "esf_sao_mateus": {
+                score: 72.86, classification: "Bom",
+                "C1": { num: 500, den: 1200, result: 41.67, status: "Bom" },
+                "C2": { num: 150, den: 200, result: 75.00, status: "Bom" },
+                "C3": { num: 40, den: 50, result: 80.00, status: "Ótimo" },
+                "C4": { num: 160, den: 200, result: 80.00, status: "Ótimo" },
+                "C5": { num: 350, den: 400, result: 87.50, status: "Ótimo" },
+                "C6": { num: 500, den: 600, result: 83.33, status: "Ótimo" },
+                "C7": { num: 60, den: 100, result: 60.00, status: "Bom" }
+            }
+        };
+
+        // --- HELPER FUNCTION TO GENERATE INDICATOR OBJECTS ---
+        function createEsfIndicator(cod, data) {
+            const meta = ESF_INDICATOR_METADATA[cod];
+            
+            // Custom action tips based on performance (reusing logic from thought process)
+            let actionTip;
+            if (data.status === 'Ótimo') actionTip = 'Excelente desempenho. Manter o padrão e buscar ser referência municipal.';
+            else if (data.status === 'Bom') actionTip = 'Bom resultado. Focar nas ações sugeridas para atingir o nível Ótimo.';
+            else if (data.status === 'Suficiente') actionTip = 'Atenção. Implementar imediatamente a ação sugerida e monitorar o impacto.';
+            else actionTip = 'Crítico. Plano de intervenção imediato é obrigatório. Foco na ação sugerida.';
+
+            return {
+                cod: cod,
+                title: meta.title,
+                result: data.result,
+                displayResult: data.result.toFixed(2).replace('.', ',') + '%',
+                meta: meta.meta,
+                status: data.status,
+                num: data.num,
+                den: data.den,
+                numDesc: meta.numDesc,
+                denDesc: meta.denDesc,
+                concept: meta.concept,
+                criteria: meta.criteria,
+                action: actionTip,
+                color: STATUS_COLORS[data.status]?.hex
+            };
+        }
+
+        function getEsfIndicatorsData(teamId) {
+            const numericalData = CAMANDUCAIA_ESF_NUMERICAL_DATA[teamId];
+            if (!numericalData) return [];
+            
+            return [
+                createEsfIndicator("C1", numericalData["C1"]),
+                createEsfIndicator("C2", numericalData["C2"]),
+                createEsfIndicator("C3", numericalData["C3"]),
+                createEsfIndicator("C4", numericalData["C4"]),
+                createEsfIndicator("C5", numericalData["C5"]),
+                createEsfIndicator("C6", numericalData["C6"]),
+                createEsfIndicator("C7", numericalData["C7"]),
+            ].sort((a, b) => a.cod.localeCompare(b.cod));
+        }
+
+        // --- DATA STORE (Refactored for Team Type) ---
+        const municipalityData = {
+            "camanducaia": {
+                name: "Camanducaia - MG",
+                password: '022025',
+                population: 18500,
+                defaultTeamType: "esf_eap",
+                teams: {
+                    "esf_eap": {
+                        "esf_centro": { 
+                            teamName: "eSF Centro", 
+                            score: CAMANDUCAIA_ESF_NUMERICAL_DATA.esf_centro.score, 
+                            classification: CAMANDUCAIA_ESF_NUMERICAL_DATA.esf_centro.classification, 
+                            population: 3800, 
+                            indicators: getEsfIndicatorsData("esf_centro") 
+                        },
+                        "esf_cruzeiro": { 
+                            teamName: "eSF Cruzeiro", 
+                            score: CAMANDUCAIA_ESF_NUMERICAL_DATA.esf_cruzeiro.score, 
+                            classification: CAMANDUCAIA_ESF_NUMERICAL_DATA.esf_cruzeiro.classification, 
+                            population: 1950, 
+                            indicators: getEsfIndicatorsData("esf_cruzeiro") 
+                        },
+                        "esf_loteamento": { 
+                            teamName: "eSF Loteamento", 
+                            score: CAMANDUCAIA_ESF_NUMERICAL_DATA.esf_loteamento.score, 
+                            classification: CAMANDUCAIA_ESF_NUMERICAL_DATA.esf_loteamento.classification, 
+                            population: 2500, 
+                            indicators: getEsfIndicatorsData("esf_loteamento") 
+                        },
+                        "esf_monte_verde": { 
+                            teamName: "eSF Monte Verde", 
+                            score: CAMANDUCAIA_ESF_NUMERICAL_DATA.esf_monte_verde.score, 
+                            classification: CAMANDUCAIA_ESF_NUMERICAL_DATA.esf_monte_verde.classification, 
+                            population: 2100, 
+                            indicators: getEsfIndicatorsData("esf_monte_verde") 
+                        },
+                        "esf_ponte_nova": { 
+                            teamName: "eSF Ponte Nova", 
+                            score: CAMANDUCAIA_ESF_NUMERICAL_DATA.esf_ponte_nova.score, 
+                            classification: CAMANDUCAIA_ESF_NUMERICAL_DATA.esf_ponte_nova.classification, 
+                            population: 1800, 
+                            indicators: getEsfIndicatorsData("esf_ponte_nova") 
+                        },
+                        "esf_quedas_verdes": { 
+                            teamName: "eSF Quedas Verdes", 
+                            score: CAMANDUCAIA_ESF_NUMERICAL_DATA.esf_quedas_verdes.score, 
+                            classification: CAMANDUCAIA_ESF_NUMERICAL_DATA.esf_quedas_verdes.classification, 
+                            population: 1500, 
+                            indicators: getEsfIndicatorsData("esf_quedas_verdes") 
+                        },
+                        "esf_sao_mateus": { 
+                            teamName: "eSF São Mateus", 
+                            score: CAMANDUCAIA_ESF_NUMERICAL_DATA.esf_sao_mateus.score, 
+                            classification: CAMANDUCAIA_ESF_NUMERICAL_DATA.esf_sao_mateus.classification, 
+                            population: 2300, 
+                            indicators: getEsfIndicatorsData("esf_sao_mateus") 
+                        }
+                    },
+                    "esb": { 
+                        "esb_cruzeiro": { teamName: "eSB Cruzeiro", score: 75.00, classification: "Bom", population: 3800, indicators: getEsbIndicators(80) },
+                        "esb_monte_verde": { teamName: "eSB Monte Verde", score: 92.00, classification: "Ótimo", population: 2100, indicators: getEsbIndicators(95) }
+                    },
+                    "emulti": { 
+                        "emulti_01": { teamName: "eMulti 01", score: 65.00, classification: "Suficiente", population: 10000, indicators: getEmultiIndicators(65) },
+                        "emulti_02": { teamName: "eMulti 02", score: 78.00, classification: "Bom", population: 8000, indicators: getEmultiIndicators(80) },
+                        "emulti_03": { teamName: "eMulti 03", score: 50.00, classification: "Suficiente", population: 5000, indicators: getEmultiIndicators(55) }
+                    }
+                }
+            },
+            "cachoeira_de_minas": {
+                name: "Cachoeira de Minas - MG", 
+                password: '012025', 
+                population: 11000, 
+                defaultTeamType: "esf_eap",
+                teams: {
+                    "esf_eap": { 
+                        "esf_cachoeira_i": { teamName: "eSF Cachoeira de Minas I", score: 85.5, classification: "Ótimo", population: 2200, indicators: [] },
+                        "esf_cachoeira_ii": { teamName: "eSF Cachoeira de Minas II", score: 78.0, classification: "Bom", population: 2000, indicators: [] },
+                        "esf_cachoeira_iii": { teamName: "eSF Cachoeira de Minas III", score: 65.0, classification: "Bom", population: 2300, indicators: [] },
+                        "esf_cachoeira_iv": { teamName: "eSF Cachoeira de Minas IV", score: 55.0, classification: "Bom", population: 2100, indicators: [] },
+                        "esf_cachoeira_v": { teamName: "eSF Cachoeira de Minas V", score: 40.0, classification: "Suficiente", population: 1500, indicators: [] },
+                        "esf_itaim": { teamName: "eSF Itaim", score: 35.0, classification: "Suficiente", population: 900, indicators: [] }
+                    },
+                    "esb": { 
+                        "esb_cachoeira": { teamName: "eSB Cachoeira de Minas", score: 90.00, classification: "Ótimo", population: 2000, indicators: getEsbIndicators(90) },
+                        "esb_cachoeira_ii": { teamName: "eSB Cachoeira II", score: 85.00, classification: "Ótimo", population: 1800, indicators: getEsbIndicators(85) },
+                        "esb_cachoeira_iii": { teamName: "eSB Cachoeira III", score: 70.00, classification: "Bom", population: 1500, indicators: getEsbIndicators(75) },
+                        "esb_cachoeira_iv": { teamName: "eSB Cachoeira IV", score: 60.00, classification: "Bom", population: 1200, indicators: getEsbIndicators(65) },
+                        "esb_itaim": { teamName: "eSB do Itaim", score: 50.00, classification: "Suficiente", population: 800, indicators: getEsbIndicators(55) }
+                    },
+                    "emulti": { 
+                        "nasf_cachoeira": { teamName: "NASF Cachoeira de Minas", score: 80.00, classification: "Bom", population: 5000, indicators: getEmultiIndicators(80) } 
+                    }
+                }
+            },
+            "corrego_do_bom_jesus": {
+                name: "Córrego do Bom Jesus - MG", password: '032025', population: 4200, defaultTeamType: "esf_eap",
+                teams: {
+                    "esf_eap": { "esf_central": { teamName: "eSF Central", score: 30.5, classification: "Regular", population: 1500, indicators: [] } },
+                    "esb": { "esb_01": { teamName: "eSB 01", score: 40.00, classification: "Regular", population: 1500, indicators: getEsbIndicators(50) } },
+                    "emulti": { "emulti_01": { teamName: "eMulti Rural", score: 55.00, classification: "Suficiente", population: 2000, indicators: getEmultiIndicators(60) } }
+                }
+            },
+             "delfim_moreira": {
+                name: "Delfim Moreira - MG", password: '042025', population: 8500, defaultTeamType: "esf_eap",
+                teams: {
+                    "esf_eap": { "esf_central": { teamName: "eSF Central", score: 95.0, classification: "Ótimo", population: 3000, indicators: [] } },
+                    "esb": { "esb_01": { teamName: "eSB 01", score: 98.00, classification: "Ótimo", population: 3000, indicators: getEsbIndicators(98) } },
+                    "emulti": { "emulti_01": { teamName: "eMulti Sede", score: 90.00, classification: "Ótimo", population: 4000, indicators: getEmultiIndicators(90) } }
+                }
+            },
+            "itapeva": {
+                name: "Itapeva - MG", password: '052025', population: 13000, defaultTeamType: "esf_eap",
+                teams: {
+                    "esf_eap": { "esf_central": { teamName: "eSF Central", score: 55.0, classification: "Bom", population: 2800, indicators: [] } },
+                    "esb": { "esb_01": { teamName: "eSB 01", score: 65.00, classification: "Bom", population: 3000, indicators: getEsbIndicators(70) } },
+                    "emulti": { "emulti_01": { teamName: "eMulti 01", score: 68.00, classification: "Suficiente", population: 5000, indicators: getEmultiIndicators(75) } }
+                }
+            },
+            "pedralva": {
+                name: "Pedralva - MG", password: '062025', population: 11000, defaultTeamType: "esf_eap",
+                teams: {
+                    "esf_eap": { "esf_sede": { teamName: "eSF Sede", score: 70.0, classification: "Bom", population: 2500, indicators: [] } },
+                    "esb": { "esb_01": { teamName: "eSB 01", score: 80.00, classification: "Bom", population: 2500, indicators: getEsbIndicators(85) },
+                    },
+                    "emulti": { 
+                        "emulti_01": { teamName: "eMulti Rural", score: 75.00, classification: "Bom", population: 3000, indicators: getEmultiIndicators(80) } 
+                    }
+                }
+            }
+        };
+
+        // --- GLOBAL STATE ---
+        let currentMunicipalityId = 'camanducaia';
+        let currentTeamType = 'esf_eap'; // NEW STATE FOR TEAM TYPE
+        let currentTeamId = 'esf_centro';
+        let pendingMunicipalityId = '';
+        let currentIndicatorIndex = 0;
+        let chartInstances = {};
+
+        // --- UTILS ---
+        function getActiveData() {
+            const munData = municipalityData[currentMunicipalityId];
+            if (!munData) return null;
+            
+            const teamTypeData = munData.teams[currentTeamType];
+            if (!teamTypeData) return null;
+
+            let teamData = teamTypeData[currentTeamId];
+            if (!teamData) {
+                // Fallback to the first team of the selected type if the current one isn't available
+                const firstTeamId = Object.keys(teamTypeData)[0];
+                currentTeamId = firstTeamId;
+                teamData = teamTypeData[currentTeamId];
+            }
+            
+            // Gerar mock indicators caso o array esteja vazio (para municípios que ainda não foram preenchidos)
+            if (currentTeamType === 'esf_eap' && teamData.indicators.length === 0) {
+                 // Fallback to generating mock data for municipalities where ESF data wasn't fully extracted.
+                const mockBase = teamData.score;
+                teamData.indicators = [
+                    { cod: "C1", title: ESF_INDICATOR_METADATA.C1.title, result: 45.00, displayResult: "45,00%", meta: 50, status: "Bom", num: 1200, den: 2666, numDesc: ESF_INDICATOR_METADATA.C1.numDesc, denDesc: ESF_INDICATOR_METADATA.C1.denDesc, concept: ESF_INDICATOR_METADATA.C1.concept, criteria: ESF_INDICATOR_METADATA.C1.criteria, action: "Manter o equilíbrio de acesso.", color: STATUS_COLORS['Bom'].hex },
+                    { cod: "C2", title: ESF_INDICATOR_METADATA.C2.title, result: mockBase * 0.8 < 75 ? mockBase * 0.8 : 75.00, displayResult: (mockBase * 0.8).toFixed(2).replace('.', ',') + '%', meta: 75, status: mockBase * 0.8 > 75 ? "Ótimo" : "Bom", num: 80, den: 100, numDesc: ESF_INDICATOR_METADATA.C2.numDesc, denDesc: ESF_INDICATOR_METADATA.C2.denDesc, concept: ESF_INDICATOR_METADATA.C2.concept, criteria: ESF_INDICATOR_METADATA.C2.criteria, action: "Excelente resultado. Manter ações de puericultura.", color: STATUS_COLORS['Bom'].hex },
+                    { cod: "C3", title: ESF_INDICATOR_METADATA.C3.title, result: mockBase * 0.9, displayResult: (mockBase * 0.9).toFixed(2).replace('.', ',') + '%', meta: 75, status: mockBase * 0.9 > 75 ? "Ótimo" : "Bom", num: 30, den: 40, numDesc: ESF_INDICATOR_METADATA.C3.numDesc, denDesc: ESF_INDICATOR_METADATA.C3.denDesc, concept: ESF_INDICATOR_METADATA.C3.concept, criteria: ESF_INDICATOR_METADATA.C3.criteria, action: "Garantir atendimento odontológico.", color: STATUS_COLORS['Bom'].hex },
+                    { cod: "C4", title: ESF_INDICATOR_METADATA.C4.title, result: mockBase * 1.05 > 90 ? 90 : mockBase * 1.05, displayResult: (mockBase * 1.05).toFixed(2).replace('.', ',') + '%', meta: 75, status: mockBase * 1.05 > 75 ? "Ótimo" : "Bom", num: 150, den: 200, numDesc: ESF_INDICATOR_METADATA.C4.numDesc, denDesc: ESF_INDICATOR_METADATA.C4.denDesc, concept: ESF_INDICATOR_METADATA.C4.concept, criteria: ESF_INDICATOR_METADATA.C4.criteria, action: "Manter o ritmo.", color: STATUS_COLORS['Bom'].hex },
+                    { cod: "C5", title: ESF_INDICATOR_METADATA.C5.title, result: mockBase * 1.1, displayResult: (mockBase * 1.1).toFixed(2).replace('.', ',') + '%', meta: 75, status: mockBase * 1.1 > 75 ? "Ótimo" : "Bom", num: 250, den: 300, numDesc: ESF_INDICATOR_METADATA.C5.numDesc, denDesc: ESF_INDICATOR_METADATA.C5.denDesc, concept: ESF_INDICATOR_METADATA.C5.concept, criteria: ESF_INDICATOR_METADATA.C5.criteria, action: "Excelente desempenho.", color: STATUS_COLORS['Ótimo'].hex },
+                    { cod: "C6", title: ESF_INDICATOR_METADATA.C6.title, result: mockBase * 0.9, displayResult: (mockBase * 0.9).toFixed(2).replace('.', ',') + '%', meta: 75, status: mockBase * 0.9 > 75 ? "Ótimo" : "Bom", num: 300, den: 400, numDesc: ESF_INDICATOR_METADATA.C6.numDesc, denDesc: ESF_INDICATOR_METADATA.C6.denDesc, concept: ESF_INDICATOR_METADATA.C6.concept, criteria: ESF_INDICATOR_METADATA.C6.criteria, action: "Intensificar a avaliação multidimensional.", color: STATUS_COLORS['Bom'].hex },
+                    { cod: "C7", title: ESF_INDICATOR_METADATA.C7.title, result: mockBase * 0.75, displayResult: (mockBase * 0.75).toFixed(2).replace('.', ',') + '%', meta: 75, status: mockBase * 0.75 > 75 ? "Ótimo" : "Bom", num: 20, den: 100, numDesc: ESF_INDICATOR_METADATA.C7.numDesc, denDesc: ESF_INDICATOR_METADATA.C7.denDesc, concept: ESF_INDICATOR_METADATA.C7.concept, criteria: ESF_INDICATOR_METADATA.C7.criteria, action: "Crítico. Realizar busca ativa.", color: STATUS_COLORS['Suficiente'].hex }
+                ].sort((a, b) => a.cod.localeCompare(b.cod));
+            }
+            
+            return {
+                ...munData,
+                ...teamData,
+                indicators: teamData.indicators
+            };
+        }
+
+        function updateHeader(data) {
+            document.getElementById('header-score').innerText = `Score Geral: ${data.score.toFixed(2).replace('.', ',')}%`;
+            document.getElementById('header-classification').innerText = `Classificação: ${data.classification}`;
+            document.getElementById('header-classification').className = `text-xs font-medium ${STATUS_COLORS[data.classification]?.resultColor}`;
+            
+            let teamTypeLabel = document.getElementById('team-type-select').options[document.getElementById('team-type-select').selectedIndex].text;
+            document.getElementById('header-context').innerText = `Município: ${data.name} | Tipo: ${teamTypeLabel} | Equipe: ${data.teamName} • Q3/2025`;
+
+            // Update overview stats - Now dynamic based on team type
+            document.getElementById('stat-population').innerText = data.population.toLocaleString('pt-BR');
+            
+            const isESF = currentTeamType === 'esf_eap';
+            const i1 = data.indicators.find(i => i.cod === (isESF ? 'C4' : currentTeamType === 'esb' ? 'C8' : 'M1')) || {};
+            const i2 = data.indicators.find(i => i.cod === (isESF ? 'C5' : currentTeamType === 'esb' ? 'C9' : 'M2')) || {};
+            const i3 = data.indicators.find(i => i.cod === 'C7') || {}; // C7 is the 4th stat for ESF/EAP
+
+            document.getElementById('stat-c4-label').innerText = isESF ? `Score Diabetes (C4)` : (currentTeamType === 'esb' ? `Score Gestante Odonto (C8)` : `Score Apoio Matricial (M1)`);
+            document.getElementById('stat-c5-label').innerText = isESF ? `Score Hipertensão (C5)` : (currentTeamType === 'esb' ? `Score Criança Odonto (C9)` : `Score Acomp. Crônicos (M2)`);
+            document.getElementById('stat-c7-label').innerText = isESF ? `Score Prev. Câncer (C7)` : (currentTeamType === 'esb' ? `Score ${i2.cod} (%)` : `Score ${i2.cod} (%)`); // Re-using C7 label but for the 2nd specialty indicator
+
+            document.getElementById('stat-c4').innerText = i1.displayResult || '--';
+            document.getElementById('stat-c5').innerText = i2.displayResult || '--';
+            document.getElementById('stat-c7').innerText = isESF ? i3.displayResult : (i2.displayResult || '--');
+            
+            const colorI3 = STATUS_COLORS[isESF ? i3.status : i2.status]?.resultColor || 'text-gray-800';
+            document.getElementById('stat-c7').className = `text-3xl font-bold ${colorI3} mt-2`;
+
+            // Update chart visibility based on team type
+            if (currentTeamType === 'esf_eap') {
+                document.getElementById('charts-section').classList.remove('hidden');
+                document.getElementById('no-chart-message').classList.add('hidden');
+            } else {
+                if (chartInstances.barChart) chartInstances.barChart.destroy();
+                if (chartInstances.radarChart) chartInstances.radarChart.destroy();
+                document.getElementById('charts-section').classList.add('hidden');
+                document.getElementById('no-chart-message').classList.remove('hidden');
+            }
+        }
+        
+        // --- NAVIGATION LOGIC ---
+        function switchView(viewName) {
+            document.getElementById('view-overview').classList.add('hidden');
+            document.getElementById('view-details').classList.add('hidden');
+            document.getElementById('view-methodology').classList.add('hidden');
+            
+            const selectedView = document.getElementById(`view-${viewName}`);
+            selectedView.classList.remove('hidden');
+            selectedView.classList.add('fade-in');
+
+            document.querySelectorAll('aside nav a').forEach(item => {
+                item.classList.remove('bg-blue-50', 'text-blue-700');
+                item.classList.add('text-gray-600', 'hover:bg-gray-50');
+            });
+            document.getElementById(`nav-${viewName}`).classList.add('bg-blue-50', 'text-blue-700');
+            document.getElementById(`nav-${viewName}`).classList.remove('text-gray-600', 'hover:bg-gray-50');
+
+            if (viewName === 'details') {
+                const data = getActiveData();
+                renderIndicatorNav();
+                loadIndicatorDetail(0); // Load first indicator of the selected type
+                document.getElementById('detail-team-name').innerText = data.teamName;
+            }
+        }
+        
+        // --- AUTHENTICATION & SELECTION LOGIC ---
+        function handleMunicipalitySelection(municipalityId) {
+            if (municipalityId === currentMunicipalityId) return;
+            
+            pendingMunicipalityId = municipalityId;
+            promptForPassword(municipalityData[municipalityId].name);
+        }
+
+        function promptForPassword(municipioName) {
+            const modal = document.getElementById('auth-modal');
+            const passwordInput = document.getElementById('municipio-password');
+            
+            document.getElementById('modal-municipio-name').innerText = municipioName;
+            passwordInput.value = '';
+            document.getElementById('auth-error').classList.add('hidden');
+            document.getElementById('municipality-select').disabled = true;
+            
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            modal.querySelector('.transform').classList.remove('scale-95');
+            passwordInput.focus();
+        }
+
+        function cancelAuth() {
+            const modal = document.getElementById('auth-modal');
+            
+            document.getElementById('municipality-select').value = currentMunicipalityId;
+
+            modal.querySelector('.transform').classList.add('scale-95');
+            modal.classList.add('opacity-0', 'pointer-events-none');
+            document.getElementById('municipality-select').disabled = false;
+            pendingMunicipalityId = '';
+        }
+
+        function attemptLogin() {
+            const enteredPassword = document.getElementById('municipio-password').value;
+            const dataToLoad = municipalityData[pendingMunicipalityId];
+            
+            if (dataToLoad && dataToLoad.password === enteredPassword) {
+                document.getElementById('auth-error').classList.add('hidden');
+                
+                currentMunicipalityId = pendingMunicipalityId;
+                currentTeamType = dataToLoad.defaultTeamType;
+                
+                // Ensure team type selector reflects the default
+                document.getElementById('team-type-select').value = currentTeamType;
+
+                // Load the default team for the selected municipality/teamType
+                currentTeamId = Object.keys(dataToLoad.teams[currentTeamType])[0];
+                loadData(dataToLoad);
+                
+                const modal = document.getElementById('auth-modal');
+                modal.querySelector('.transform').classList.add('scale-95');
+                modal.classList.add('opacity-0', 'pointer-events-none');
+                document.getElementById('municipality-select').disabled = false;
+            } else {
+                document.getElementById('auth-error').classList.remove('hidden');
+                document.getElementById('municipio-password').value = '';
+                document.getElementById('municipio-password').focus();
+            }
+        }
+
+        function loadTeamType(teamType) {
+            currentTeamType = teamType;
+            const munData = municipalityData[currentMunicipalityId];
+            if (!munData.teams[teamType] || Object.keys(munData.teams[teamType]).length === 0) {
+                 // Should not happen with mock data, but fallback safety
+                currentTeamId = '';
+                populateTeamSelector({});
+            } else {
+                currentTeamId = Object.keys(munData.teams[teamType])[0];
+                populateTeamSelector(munData.teams[teamType]);
+            }
+            renderDashboard();
+            switchView('overview');
+        }
+
+        function loadData(munData) {
+            populateTeamSelector(munData.teams[currentTeamType]);
+            renderDashboard();
+            switchView('overview');
+        }
+
+        function loadTeam(teamId) {
+            currentTeamId = teamId;
+            renderDashboard();
+        }
+
+        function populateMunicipalitySelector() {
+            const select = document.getElementById('municipality-select');
+            select.innerHTML = '';
+            
+            Object.keys(municipalityData).forEach(id => {
+                const option = document.createElement('option');
+                option.value = id;
+                option.innerText = municipalityData[id].name;
+                select.appendChild(option);
+            });
+            select.value = currentMunicipalityId;
+        }
+
+        function populateTeamSelector(teams) {
+            const select = document.getElementById('team-select');
+            select.innerHTML = '';
+            
+            Object.keys(teams).forEach(id => {
+                const option = document.createElement('option');
+                option.value = id;
+                option.innerText = teams[id].teamName;
+                select.appendChild(option);
+            });
+            select.value = currentTeamId;
+        }
+
+        // --- DASHBOARD RENDERING ---
+
+        function renderDashboard() {
+            const data = getActiveData();
+            if (!data) return;
+
+            updateHeader(data);
+            
+            // Only initialize charts if we have 7 indicators (eSF/eAP)
+            if (currentTeamType === 'esf_eap') {
+                 initCharts(data.indicators);
+            } else {
+                 if (chartInstances.barChart) chartInstances.barChart.destroy();
+                 if (chartInstances.radarChart) chartInstances.radarChart.destroy();
+            }
+            
+            // If currently on details view, force re-render the detail panel
+            if (!document.getElementById('view-details').classList.contains('hidden')) {
+                renderIndicatorNav(); 
+                loadIndicatorDetail(0); // Always load the first indicator in the list for the new team/type
+            }
+        }
+
+        function initCharts(indicators) {
+            // Only use C1-C7 for charts (assuming they are sorted by cod, which they are)
+            const esfIndicators = indicators.filter(i => i.cod.startsWith('C') && i.cod !== 'C8' && i.cod !== 'C9');
+            
+            const labels = esfIndicators.map(i => i.cod);
+            const results = esfIndicators.map(i => i.result);
+            const metas = esfIndicators.map(i => i.cod === 'C1' ? 30 : i.meta);
+            const colors = esfIndicators.map(i => i.color);
+
+            // Destroy existing charts if they exist
+            if (chartInstances.barChart) chartInstances.barChart.destroy();
+            if (chartInstances.radarChart) chartInstances.radarChart.destroy();
+
+            // Bar Chart (Results vs Meta)
+            const ctxBar = document.getElementById('barChart').getContext('2d');
+            chartInstances.barChart = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Resultado Alcançado (%)',
+                            data: results,
+                            backgroundColor: colors,
+                            borderRadius: 6,
+                        },
+                        {
+                            label: 'Meta Mínima (%)',
+                            data: metas,
+                            type: 'line',
+                            borderColor: '#6B7280',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + context.raw.toFixed(2).replace('.', ',') + '%';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, max: 100 }
+                    }
+                }
+            });
+
+            // Radar Chart (Balance)
+            const ctxRadar = document.getElementById('radarChart').getContext('2d');
+            chartInstances.radarChart = new Chart(ctxRadar, {
+                type: 'radar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Performance da Equipe',
+                        data: results,
+                        fill: true,
+                        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                        borderColor: 'rgb(59, 130, 246)',
+                        pointBackgroundColor: 'rgb(59, 130, 246)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgb(59, 130, 246)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            angleLines: { display: true },
+                            suggestedMin: 0,
+                            suggestedMax: 100
+                        }
+                    }
+                }
+            });
+        }
+        
+        // --- DETAILS VIEW LOGIC ---
+        function renderIndicatorNav() {
+            const data = getActiveData();
+            const container = document.getElementById('indicator-nav');
+            
+            container.innerHTML = '';
+            
+            data.indicators.forEach((ind, index) => {
+                // Ensure the active indicator is reset to the first one when switching types
+                if (index === 0) currentIndicatorIndex = 0; 
+
+                const statusColor = STATUS_COLORS[ind.status];
+                const btn = document.createElement('button');
+                btn.className = `flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium border transition-colors duration-200 ${
+                    index === currentIndicatorIndex ? 'bg-blue-600 text-white border-blue-600' : `${statusColor?.bg} ${statusColor?.text} border-gray-200 hover:bg-gray-50`
+                }`;
+                btn.innerText = `${ind.cod} - ${ind.status}`;
+                btn.onclick = (e) => {
+                    // Update active state visuals
+                    Array.from(container.children).forEach((child, i) => {
+                         const childData = data.indicators[i];
+                         const childStatusColor = STATUS_COLORS[childData.status];
+                        child.className = `flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium border transition-colors duration-200 ${childStatusColor?.bg} ${childStatusColor?.text} border-gray-200 hover:bg-gray-50`;
+                    });
+                    e.target.className = 'flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium border bg-blue-600 text-white border-blue-600';
+                    
+                    loadIndicatorDetail(index);
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        function loadIndicatorDetail(index) {
+            const activeData = getActiveData();
+            const data = activeData.indicators[index];
+            currentIndicatorIndex = index;
+
+            // Update Header
+            document.getElementById('detail-code').innerText = data.cod;
+            document.getElementById('detail-status').innerText = data.status;
+            document.getElementById('detail-status').className = `px-2 py-1 text-xs font-bold rounded ${STATUS_COLORS[data.status]?.bg} ${STATUS_COLORS[data.status]?.text}`;
+            document.getElementById('detail-title').innerText = data.title;
+            document.getElementById('detail-objective').innerText = `Objetivo: ${data.concept.split('. ')[0]}.`; // Simple extraction of first sentence for brevity
+            document.getElementById('detail-result-big').innerText = data.displayResult;
+            document.getElementById('detail-result-big').className = `text-4xl font-extrabold ${STATUS_COLORS[data.status]?.resultColor}`;
+            
+            // Meta logic adapted for non-C1 indicators
+            let metaDisplay = '> ' + data.meta + '%';
+            if (data.cod === 'C1') metaDisplay = '30-70%';
+            document.getElementById('detail-meta').innerText = `Meta: ${metaDisplay}`;
+
+            // Update Math
+            document.getElementById('detail-num-desc').innerText = data.numDesc;
+            document.getElementById('detail-num-val').innerText = data.num.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+            document.getElementById('detail-den-desc').innerText = data.denDesc;
+            document.getElementById('detail-den-val').innerText = data.den.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+            
+            // Interpretation Logic
+            let interp = "";
+            if (data.status === 'Ótimo') interp = "Excelente resultado. Continue monitorando para manter o padrão e ser referência.";
+            else if (data.status === 'Bom') interp = `Bom resultado, mas foco contínuo pode levar à excelência.`;
+            else if (data.status === 'Suficiente') interp = `Atenção: O resultado é suficiente mas indica fragilidade. Foco em melhorar o processo.`;
+            else interp = `Crítico: O resultado está abaixo do aceitável. Ação imediata e plano de intervenção necessários.`;
+            
+            document.getElementById('detail-interpretation').innerText = interp;
+
+            // Update Methodology
+            document.getElementById('detail-concept').innerText = data.concept;
+            
+            const criteriaList = document.getElementById('detail-criteria');
+            criteriaList.innerHTML = '';
+            data.criteria.forEach(c => {
+                const li = document.createElement('li');
+                li.innerText = c;
+                if (c.includes(data.status)) li.className = "font-bold text-blue-600";
+                criteriaList.appendChild(li);
+            });
+
+            document.getElementById('detail-action').innerText = data.action;
+        }
+
+        // --- INITIALIZATION ---
+        window.onload = function() {
+            // 1. Populate selectors with all municipalities
+            populateMunicipalitySelector();
+            
+            // 2. Load the initial municipality (Camanducaia) and set team type to default
+            const camanducaiaData = municipalityData[currentMunicipalityId];
+            document.getElementById('team-type-select').value = camanducaiaData.defaultTeamType;
+
+            // 3. Load teams for the default type and render dashboard
+            currentTeamType = camanducaiaData.defaultTeamType;
+            currentTeamId = Object.keys(camanducaiaData.teams[currentTeamType])[0];
+            populateTeamSelector(camanducaiaData.teams[currentTeamType]);
+
+            // 4. Render initial view
+            renderDashboard();
+            switchView('overview');
+        };
+
+    </script>
+</body>
+</html>
