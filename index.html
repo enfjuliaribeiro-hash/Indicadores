@@ -1,0 +1,1789 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APS Monitor Pro - Dashboard Multi-Município</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Chosen Palette: Warm Neutrals & Professional Status Colors -->
+    <!-- 
+        Background: #F9FAFB (Warm Gray 50)
+        Surface: #FFFFFF
+        Primary Text: #1F2937 (Gray 800)
+        Secondary Text: #6B7280 (Gray 500)
+        Accents:
+            Blue (Info): #0EA5E9
+            Status Colors derived from Ministry of Health standards (converted to pleasant hexes):
+            Otimo: #059669 (Emerald 600)
+            Bom: #10B981 (Emerald 500)
+            Suficiente: #F59E0B (Amber 500)
+            Regular/Critico: #EF4444 (Red 500)
+    -->
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Chart Container Utilities */
+        .chart-container-responsive {
+            position: relative;
+            width: 100%;
+            height: 300px;
+            max-height: 350px;
+        }
+        
+        @media (min-width: 1024px) {
+            .chart-container-responsive {
+                height: 400px;
+            }
+        }
+
+        .card-hover {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Animation for content switching */
+        .fade-in {
+            animation: fadeIn 0.4s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        /* Modal Styles */
+        .modal {
+            transition: opacity 0.3s ease-in-out;
+        }
+        
+        /* Mobile specific adjustments for main content area (P-8 is too much for small screens) */
+        main {
+             padding: 1rem; /* Default smaller padding for mobile */
+        }
+
+        @media (min-width: 640px) { /* sm breakpoint */
+            main {
+                 padding: 2rem; 
+            }
+        }
+    </style>
+
+</head>
+<body class="text-gray-800 h-screen flex overflow-hidden">
+
+    <!-- SIDEBAR NAVIGATION (Hidden on mobile) -->
+    <aside id="sidebar-nav" class="w-64 bg-white border-r border-gray-200 hidden md:flex flex-col z-10">
+        <div class="p-6 border-b border-gray-100 flex items-center gap-3">
+            <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">M</div>
+            <span class="font-bold text-xl tracking-tight text-gray-900">APS Monitor</span>
+        </div>
+
+        <div class="p-4">
+            <label class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block">Município</label>
+            <div class="relative mb-4">
+                <select id="municipality-select" onchange="handleMunicipalitySelection(this.value)" class="w-full bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 appearance-none">
+                    <!-- Populated by JS -->
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                    <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                </div>
+            </div>
+            
+            <label class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block">Tipo de Equipe</label>
+            <div class="relative mb-4">
+                <select id="team-type-select" onchange="loadTeamType(this.value)" class="w-full bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 appearance-none">
+                    <option value="esf_eap">eSF / eAP (Saúde da Família)</option>
+                    <option value="esb">eSB (Saúde Bucal)</option>
+                    <option value="emulti">eMulti (Multiprofissional)</option>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                    <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                </div>
+            </div>
+
+            <label class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block">Equipe Específica (INE)</label>
+            <div class="relative mb-4">
+                <select id="team-select" onchange="loadTeam(this.value)" class="w-full bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 appearance-none">
+                    <!-- Populated by JS -->
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                    <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                </div>
+            </div>
+            
+            <!-- NOVO FILTRO: PROGRAMA DE INCENTIVO -->
+            <label class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block">Programa de Incentivo</label>
+            <div class="relative mb-4">
+                <select id="incentive-program-select" onchange="loadIncentiveProgram(this.value)" class="w-full bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 appearance-none">
+                    <option value="cofinanciamento">Cofinanciamento Federal</option>
+                    <option value="poeps">POEPS</option>
+                    <option value="pse">PSE</option>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                    <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                </div>
+            </div>
+            
+            <!-- NOVO FILTRO: OPÇÕES DO COFINANCIAMENTO FEDERAL -->
+            <div id="cofinanciamento-sub-selector" class="space-y-2 mb-4 hidden">
+                 <label class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block">Métrica do Cofinanciamento</label>
+                <div class="relative">
+                    <select id="cofinanciamento-view-select" onchange="loadCofinanciamentoView(this.value)" class="w-full bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 appearance-none">
+                        <option value="indicadores">Indicadores de Qualidade (C1-C7)</option>
+                        <option value="vinculo">Vínculo e Acompanhamento (Filtro 2)</option>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <nav class="flex-1 px-4 space-y-1 overflow-y-auto">
+            <a href="#" onclick="switchView('overview')" id="nav-overview" class="nav-item bg-blue-50 text-blue-700 group flex items-center px-3 py-2 text-sm font-medium rounded-md">
+                <span>📊 Visão Geral</span>
+            </a>
+            <a href="#" onclick="switchView('details')" id="nav-details" class="nav-item text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-3 py-2 text-sm font-medium rounded-md">
+                <span>🔍 Detalhamento (Indicadores)</span>
+            </a>
+            <!-- NOME ALTERADO CONFORME SOLICITADO -->
+            <a href="#" onclick="switchView('methodology')" id="nav-methodology" class="nav-item text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-3 py-2 text-sm font-medium rounded-md">
+                <span>📚 Sobre os Indicadores</span>
+            </a>
+        </nav>
+
+        <div class="p-4 border-t border-gray-200">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-600">JS</div>
+                <div>
+                    <p class="text-sm font-medium text-gray-700">Gestor APS</p>
+                    <p class="text-xs text-gray-500">Logado</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-1 overflow-y-auto bg-gray-50 relative">
+        <!-- Header -->
+        <header class="bg-white shadow-sm sticky top-0 z-20 px-4 py-3 sm:px-8 sm:py-4 flex justify-between items-center">
+            <div>
+                <!-- Título redefinido -->
+                <h1 class="text-lg sm:text-2xl font-bold text-gray-800">Monitoramento Indicadores de Qualidade</h1>
+                <p class="text-xs sm:text-sm text-gray-500" id="header-context">Dados do Quadrimestre 3 / 2025 • Fonte: SISAB/e-SUS</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <!-- SCORE GERAL REMOVIDO CONFORME SOLICITADO -->
+                <div class="text-right hidden sm:block">
+                    <!-- <p class="text-sm font-semibold text-gray-900" id="header-score">Score Geral: --</p> -->
+                    <p class="text-sm font-semibold text-gray-900" id="header-program-name">Programa: Cofinanciamento Federal</p>
+                    <p class="text-xs font-medium" id="header-classification">Classificação Geral: --</p>
+                </div>
+                <!-- Mobile Menu Button (currently non-functional but maintained for structure) -->
+                <button class="p-2 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 md:hidden">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- VIEW: OVERVIEW (Indicadores de Qualidade) -->
+        <div id="view-overview" class="p-4 sm:p-8 space-y-4 sm:space-y-8 fade-in">
+            <!-- Intro Paragraph -->
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
+                <h3 class="font-bold text-blue-800">Resumo da Equipe Selecionada</h3>
+                <p class="text-sm text-blue-700 mt-1" id="overview-intro-text">
+                    Esta visão consolida os indicadores de desempenho da equipe. Utilize o gráfico Radar para identificar o equilíbrio entre as linhas de cuidado e o gráfico de Barras para comparar o desempenho com a meta.
+                </p>
+            </div>
+
+            <!-- Top Stats Grid (Forces 1 column on mobile, 3 on large screens) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6" id="stats-grid">
+                
+                <!-- Diabetic Care -->
+                <div class="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100">
+                    <p class="text-xs font-semibold text-gray-400 uppercase" id="stat-c4-label">Score Cuidado Diabetes (C4)</p>
+                    <p class="text-2xl sm:text-3xl font-bold text-gray-800 mt-1 sm:mt-2" id="stat-c4">--</p>
+                    <p class="text-xs text-blue-500 mt-1">Meta: >75%</p>
+                </div>
+                <!-- Hypertension Care -->
+                <div class="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100">
+                    <p class="text-xs font-semibold text-gray-400 uppercase" id="stat-c5-label">Score Cuidado Hipertensão (C5)</p>
+                    <p class="text-2xl sm:text-3xl font-bold text-gray-800 mt-1 sm:mt-2" id="stat-c5">--</p>
+                    <p class="text-xs text-blue-500 mt-1">Meta: >75%</p>
+                </div>
+                 <!-- Prevention Score / Specialist Score (eSB/eMulti) -->
+                 <div class="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100">
+                    <p class="text-xs font-semibold text-gray-400 uppercase" id="stat-c7-label">Score Prev. Câncer (C7)</p>
+                    <p class="text-2xl sm:text-3xl font-bold text-red-600 mt-1 sm:mt-2" id="stat-c7">--</p>
+                    <p class="text-xs text-gray-500 mt-1">Status Crítico/Regular</p>
+                </div>
+            </div>
+
+            <!-- Main Charts Section (Forces 1 column on mobile, 3 on large screens) -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-8" id="charts-section">
+                <!-- Bar Chart: Results vs Meta -->
+                <div class="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 lg:col-span-2">
+                    <!-- Título alterado -->
+                    <h3 class="font-bold text-gray-800 mb-4">Desempenho dos Indicadores</h3>
+                    <div class="chart-container-responsive">
+                        <canvas id="barChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Radar Chart: Balance -->
+                <div class="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100">
+                    <h3 class="font-bold text-gray-800 mb-4">Equilíbrio da Equipe </h3>
+                    <p class="text-xs text-gray-500 mb-4">Visualização da performance relativa entre as linhas de cuidado.</p>
+                    <div class="chart-container-responsive" style="height: 300px;">
+                        <canvas id="radarChart"></canvas>
+                    </div>
+                    <div class="mt-4 text-center">
+                        <span class="inline-block px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full font-semibold">Pontos fracos são identificados pela proximidade ao centro.</span>
+                    </div>
+                </div>
+            </div>
+            <!-- Message when charts are not available for eSB/eMulti -->
+            <div id="no-chart-message" class="bg-gray-200 p-6 rounded-xl shadow-sm hidden">
+                <p class="text-center text-gray-600 font-semibold">Gráficos de Comparação (Barra e Radar) disponíveis apenas para os 7 Indicadores Principais (eSF/eAP).</p>
+                <p class="text-center text-sm text-gray-500 mt-2">Veja o desempenho nos cards de estatísticas e no Detalhamento.</p>
+            </div>
+        </div>
+
+        <!-- VIEW: DETAILS (The Core Interaction - Indicadores de Qualidade) -->
+        <div id="view-details" class="p-4 sm:p-8 space-y-4 sm:space-y-6 hidden fade-in">
+             <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-indigo-500">
+                <h3 class="font-bold text-indigo-900">Análise Detalhada dos Indicadores</h3>
+                <p class="text-sm text-gray-600 mt-1">
+                    Utilize os botões de navegação horizontal para analisar a memória de cálculo, a nota metodológica e a sugestão de ação para cada um dos indicadores da equipe <span id="detail-team-name" class="font-semibold">eSF Centro</span>.
+                </p>
+            </div>
+
+            <!-- Indicator Selector (Horizontal Scroll on Mobile - Critical for small screens) -->
+            <div class="flex space-x-3 overflow-x-auto pb-4" id="indicator-nav">
+                <!-- Populated by JS -->
+            </div>
+
+            <!-- Active Indicator Detail Panel -->
+            <div id="detail-panel" class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                <!-- Header of Panel -->
+                <div class="bg-gray-50 px-4 py-4 sm:px-8 sm:py-6 border-b border-gray-200 flex justify-between items-start flex-col md:flex-row gap-4">
+                    <div>
+                        <div class="flex items-center gap-2 mb-2">
+                            <span id="detail-code" class="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded">--</span>
+                            <!-- STATUS do indicador, mantido para contextuo -->
+                            <span id="detail-status" class="px-2 py-1 bg-gray-200 text-gray-800 text-xs font-bold rounded">--</span>
+                        </div>
+                        <!-- TÍTULO SIMPLIFICADO CONFORME SOLICITADO -->
+                        <h2 id="detail-title" class="text-xl sm:text-2xl font-bold text-gray-900">--</h2>
+                        <!-- OBJETIVO REMOVIDO CONFORME SOLICITADO -->
+                    </div>
+                    <!-- Result Box: META REMOVIDA CONFORME SOLICITADO -->
+                    <div class="text-right bg-white p-3 rounded-lg border border-gray-100 shadow-sm w-full md:w-auto mt-3 md:mt-0">
+                        <p class="text-xs text-gray-500 uppercase font-semibold">Resultado Atual</p>
+                        <p id="detail-result-big" class="text-3xl sm:text-4xl font-extrabold text-gray-800">--</p>
+                        <!-- META REMOVIDA DAQUI -->
+                    </div>
+                </div>
+
+                <!-- Content Grid (Forces 1 column on mobile, 2 on desktop) -->
+                <div class="grid grid-cols-1 md:grid-cols-2">
+                    <!-- Left: The Math (Calculated from Context) -->
+                    <div class="p-4 sm:p-8 border-b md:border-b-0 md:border-r border-gray-200">
+                        <h4 class="font-bold text-gray-800 flex items-center gap-2 mb-4 sm:mb-6">
+                            <span>🧮</span> Memória de Cálculo
+                        </h4>
+                        
+                        <div class="space-y-4 sm:space-y-6">
+                            <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                                <p class="text-xs text-blue-600 uppercase font-semibold mb-1">Numerador</p>
+                                <p id="detail-num-desc" class="text-sm text-gray-700 mb-2">--</p>
+                                <p id="detail-num-val" class="text-xl sm:text-2xl font-mono font-bold text-blue-800">--</p>
+                            </div>
+
+                            <div class="flex justify-center text-gray-400 font-bold text-xl">÷</div>
+
+                            <div class="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                <p class="text-xs text-gray-500 uppercase font-semibold mb-1">Denominador</p>
+                            <p id="detail-den-desc" class="text-sm text-gray-700 mb-2">--</p>
+                            <p id="detail-den-val" class="text-xl sm:text-2xl font-mono font-bold text-gray-800">--</p>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-100">
+                            <h5 class="font-semibold text-sm text-gray-900 mb-2">Interpretação do Resultado</h5>
+                            <p id="detail-interpretation" class="text-sm text-gray-600 leading-relaxed">
+                                --
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Right: Methodology & Actions -->
+                    <div class="p-4 sm:p-8 bg-gray-50/50">
+                        <h4 class="font-bold text-gray-800 flex items-center gap-2 mb-4 sm:mb-6">
+                            <span>📚</span> Nota Metodológica & Ação
+                        </h4>
+                        
+                        <div class="space-y-4 sm:space-y-6">
+                            <div>
+                                <h5 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Conceito Chave</h5>
+                                <p id="detail-concept" class="text-sm text-gray-700 bg-white p-3 rounded border border-gray-200">
+                                    --
+                                </p>
+                            </div>
+
+                            <div>
+                                <h5 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Critérios de Classificação</h5>
+                                <ul id="detail-criteria" class="text-sm text-gray-600 space-y-2 list-disc list-inside">
+                                    <!-- Populated by JS -->
+                                </ul>
+                            </div>
+
+                            <div class="pt-4 mt-4 border-t border-gray-200">
+                                <h5 class="text-xs font-bold text-blue-600 uppercase tracking-wider mb-2">Sugestão de Ação</h5>
+                                <p id="detail-action" class="text-sm text-gray-700">
+                                    --
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- VIEW: VINCULO E ACOMPANHAMENTO (New Placeholder View) -->
+        <div id="view-vinculo" class="p-4 sm:p-8 space-y-4 sm:space-y-8 hidden fade-in">
+             <div class="bg-indigo-50 border-l-4 border-indigo-500 p-4 rounded-r-lg">
+                <h3 class="font-bold text-indigo-900">Vínculo e Acompanhamento: Detalhes da Equipe</h3>
+                <p class="text-sm text-indigo-700 mt-1">
+                    Esta seção, sob a métrica **Cofinanciamento Federal**, apresentará os dados de Vínculo e Acompanhamento Longitudinal (conforme Ficha 2).
+                </p>
+                <p class="text-xs text-gray-500 mt-2">
+                    Conteúdo em desenvolvimento.
+                </p>
+            </div>
+            
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h4 class="text-lg font-semibold text-gray-800 mb-3">Métricas Chave de Vínculo</h4>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="border border-gray-200 p-4 rounded-lg shadow-sm">
+                        <p class="text-sm text-gray-500">Total de Usuários Ativos</p>
+                        <p class="text-2xl font-bold text-blue-600">--</p>
+                    </div>
+                    <div class="border border-gray-200 p-4 rounded-lg shadow-sm">
+                        <p class="text-sm text-gray-500">Índice de Vínculo</p>
+                        <p class="text-2xl font-bold text-blue-600">--</p>
+                    </div>
+                    <div class="border border-gray-200 p-4 rounded-lg shadow-sm">
+                        <p class="text-sm text-gray-500">Acompanhamento Longitudinal (%)</p>
+                        <p class="text-2xl font-bold text-blue-600">--</p>
+                    </div>
+                </div>
+                <p class="text-sm text-gray-600 mt-6">
+                    Selecione **Indicadores de Qualidade** na barra lateral (Métrica do Cofinanciamento) para voltar à visualização dos indicadores C1-C7.
+                </p>
+            </div>
+        </div>
+        
+        <!-- VIEW: METHODOLOGY (Static Reference) -->
+        <!-- NOME ALTERADO CONFORME SOLICITADO -->
+        <div id="view-methodology" class="p-4 sm:p-8 space-y-6 hidden fade-in">
+             <div class="prose max-w-none text-gray-600">
+                <h2 class="text-2xl font-bold text-gray-800">Sobre os Indicadores</h2>
+                <p>O monitoramento da qualidade é baseado nas Notas Metodológicas Q3/2025 do Ministério da Saúde. Esta seção resume as dimensões de avaliação.</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mt-4 sm:mt-6">
+                    <div class="bg-white p-4 sm:p-6 rounded-lg shadow-sm">
+                        <h3 class="font-bold text-lg text-gray-800">Acesso e Ciclos de Vida (eSF/eAP)</h3>
+                        <ul class="list-disc list-inside mt-2 text-sm space-y-1">
+                            <li><strong>C1 (Mais Acesso):</strong> Equilíbrio entre demanda espontânea (imediata) e demanda programada (agendada para acompanhamento). A meta é evitar os extremos.</li>
+                            <li><strong>C2 (Cuidado no Desenvolvimento Infantil):</strong> Cobertura de boas práticas de puericultura e acompanhamento de crianças de 0 a 2 anos.</li>
+                            <li><strong>C3 (Cuidado na Gestação e Puerpério):</strong> Qualidade do pré-natal, incluindo número mínimo de consultas e exames essenciais.</li>
+                            <li><strong>C7 (Cuidado da Mulher na Prevenção do Câncer):</strong> Rastreamento de Câncer de Colo de Útero (Citopatológico) e Câncer de Mama (Mamografia) na população alvo.</li>
+                        </ul>
+                    </div>
+                     <div class="bg-white p-4 sm:p-6 rounded-lg shadow-sm">
+                        <h3 class="font-bold text-lg text-gray-800">Doenças Crônicas e Condições Específicas (eSF/eAP)</h3>
+                        <ul class="list-disc list-inside mt-2 text-sm space-y-1">
+                            <li><strong>C4 (Cuidado da Pessoa com Diabetes):</strong> Monitoramento da doença, garantindo consultas e exames de controle (HbA1c).</li>
+                            <li><strong>C5 (Cuidado da Pessoa com Hipertensão):</strong> Monitoramento da doença, com aferição regular da Pressão Arterial (PA) e consultas.</li>
+                            <li><strong>C6 (Cuidado da Pessoa Idosa):</strong> Avaliação multidimensional da saúde do idoso, promovendo o cuidado integral e planos de atenção.</li>
+                            <li>A pontuação para os indicadores de doenças crônicas (C4, C5, C6) reflete a porcentagem de boas práticas aplicadas aos pacientes ativos.</li>
+                        </ul>
+                    </div>
+                     <div class="bg-white p-4 sm:p-6 rounded-lg shadow-sm">
+                        <h3 class="font-bold text-lg text-gray-800">Saúde Bucal e Apoio Matriz (eSB/eMulti)</h3>
+                        <ul class="list-disc list-inside mt-2 text-sm space-y-1">
+                            <li><strong>C8/C9 (eSB):</strong> Indicadores focados na prevenção odontológica para gestantes e crianças.</li>
+                            <li><strong>M1/M2 (eMulti):</strong> Indicadores focados na qualidade do Apoio Matricial e na condução de grupos terapêuticos para condições crônicas.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+    
+    <!-- Modal de Autenticação -->
+    <div id="auth-modal" class="modal fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center z-50 opacity-0 pointer-events-none">
+        <div class="bg-white p-8 rounded-xl shadow-2xl w-11/12 max-w-sm transform scale-95 transition-transform duration-300">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">🔐 Acesso Restrito</h3>
+            <p class="text-sm text-gray-600 mb-4">Insira a senha para acessar os dados de <span id="modal-municipio-name" class="font-semibold text-blue-600"></span>:</p>
+            
+            <input type="password" id="municipio-password" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 mb-3 text-lg" placeholder="******" onkeypress="if(event.key === 'Enter') attemptLogin()">
+            
+            <p id="auth-error" class="text-xs text-red-500 mb-4 hidden">Senha incorreta. Tente novamente.</p>
+
+            <div class="flex justify-end space-x-3 mt-4">
+                <button onclick="cancelAuth()" class="px-4 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300">Cancelar</button>
+                <button onclick="attemptLogin()" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Acessar</button>
+            </div>
+        </div>
+    </div>
+    <!-- FIM do Modal de Autenticação -->
+
+    
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // --- CONSTANTS ---
+        const STATUS_COLORS = {
+            'Ótimo': { bg: 'bg-blue-100', text: 'text-blue-800', resultColor: 'text-blue-600', hex: '#3B82F6' },
+            'Bom': { bg: 'bg-green-100', text: 'text-green-800', resultColor: 'text-green-600', hex: '#10B981' },
+            'Suficiente': { bg: 'bg-yellow-100', text: 'text-yellow-800', resultColor: 'text-yellow-600', hex: '#F59E0B' },
+            'Regular': { bg: 'bg-red-100', text: 'text-red-800', resultColor: 'text-red-600', hex: '#EF4444' },
+            'Crítico': { bg: 'bg-red-100', text: 'text-red-800', resultColor: 'text-red-600', hex: '#EF4444' },
+        };
+        
+        // --- CENTRALIZED ESF METADATA ---
+        const ESF_INDICATOR_METADATA = {
+            "C1": { 
+                title: "Mais Acesso", // TÍTULO SIMPLIFICADO
+                meta: 50, 
+                numDesc: "Consultas Agendadas", 
+                denDesc: "Total de Atendimentos (Espontânea + Programada)", 
+                concept: "Verifica o percentual de acesso de demanda programada em relação ao total de demandas (espontânea e programada) na APS. O indicador idealiza um equilíbrio na agenda que garanta acesso para necessidades agudas (espontânea) e acompanhamento contínuo (programada).", 
+                criteria: ["Ótimo: >50% e ≤70%", "Bom: >30% e ≤50%", "Suficiente: >10% e ≤30%", "Regular: ≤10% ou >70%"],
+                actionTipBase: "Revise a organização da agenda. É crucial reservar blocos horários para atendimento programado (crônicos, ciclos de vida) E garantir acolhimento ou atendimento imediato para demanda espontânea."
+            },
+            "C2": { 
+                title: "Cuidado no Desenvolvimento Infantil", // TÍTULO SIMPLIFICADO
+                meta: 75, 
+                numDesc: "Crianças com Boas Práticas (Vacinas, Consultas, Avaliações)", 
+                denDesc: "Crianças Vinculadas (Est.)", 
+                concept: "Avalia o acesso e monitoramento efetivo das crianças até dois anos de idade, focando na cobertura vacinal (Polio e Penta) e realização das consultas de puericultura.", 
+                criteria: ["Ótimo: >75%", "Bom: >50%", "Suficiente: >25%", "Regular: ≤25%"],
+                actionTipBase: "Intensificar a busca ativa de crianças faltosas nas consultas de puericultura e na sala de vacinas. O acompanhamento coordenado e contínuo é chave."
+            },
+            "C3": { 
+                title: "Cuidado na Gestação e Puerpério", // TÍTULO SIMPLIFICADO
+                meta: 75, 
+                numDesc: "Gestantes com Boas Práticas (6+ consultas, Exames, Odonto)", 
+                denDesc: "Gestantes Vinculadas (Est.)", 
+                concept: "Mede a qualidade do cuidado pré-natal, garantindo no mínimo 6 consultas, exames de sífilis/HIV e atendimento odontológico, além da consulta de puerpério.", 
+                criteria: ["Ótimo: >75%", "Bom: >50%", "Suficiente: >25%", "Regular: ≤25%"],
+                actionTipBase: "Foco na captação precoce (até 12ª semana) e na garantia do atendimento odontológico. A falta de apenas um item (exames ou odonto) impede a pontuação da gestante."
+            },
+            "C4": { 
+                title: "Cuidado da Pessoa com Diabetes", // TÍTULO SIMPLIFICADO
+                meta: 75, 
+                numDesc: "Diabéticos Pontuados (Consulta + HbA1c)", 
+                denDesc: "Diabéticos Vinculados (Est.)", 
+                concept: "Avalia o monitoramento semestral de pacientes com diabetes. O paciente deve ter pelo menos uma consulta e a solicitação ou registro da Hemoglobina Glicada (HbA1c) no semestre.", 
+                criteria: ["Ótimo: >75%", "Bom: >50%", "Suficiente: >25%", "Regular: ≤25%"],
+                actionTipBase: "Crie listas de pacientes diabéticos com data da última HbA1c. Utilize grupos operativos para rastrear os faltosos e agendar a coleta de exames e a consulta de reavaliação."
+            },
+            "C5": { 
+                title: "Cuidado da Pessoa com Hipertensão", // TÍTULO SIMPLIFICADO
+                meta: 75, 
+                numDesc: "Hipertensos Pontuados (Consulta + Aferição de PA)", 
+                denDesc: "Hipertensos Vinculados (Est.)", 
+                concept: "Mede o acompanhamento semestral de pacientes com hipertensão. O paciente deve ter pelo menos uma consulta e o registro da Aferição da Pressão Arterial (PA) no semestre.", 
+                criteria: ["Ótimo: >75%", "Bom: >50%", "Suficiente: >25%", "Regular: ≤25%"],
+                actionTipBase: "Garantir o registro estruturado e correto da Pressão Arterial (PA) em todos os atendimentos, mesmo os de triagem e acolhimento. A alta frequência de monitoramento é essencial para o controle."
+            },
+            "C6": { 
+                title: "Cuidado da Pessoa Idosa", // TÍTULO SIMPLIFICADO
+                meta: 75, 
+                numDesc: "Idosos Pontuados (Avaliação Multidimensional)", 
+                denDesc: "Idosos Vinculados (Est.)", 
+                concept: "Avalia o monitoramento efetivo do cuidado integral à saúde de pessoas idosas (≥ 60 anos), com ênfase na aplicação de planos de cuidados ou avaliação multidimensional (Ex: IVCF-20/VES-13).", 
+                criteria: ["Ótimo: >75%", "Bom: >50%", "Suficiente: >25%", "Regular: ≤25%"],
+                actionTipBase: "Foco na aplicação da Avaliação Multidimensional da Pessoa Idosa (AMPI). Priorize idosos frágeis, acamados ou com múltiplas comorbidades. O registro correto dos códigos de avaliação é fundamental."
+            },
+            "C7": { 
+                title: "Cuidado da Mulher na Prevenção do Câncer", // TÍTULO SIMPLIFICADO
+                meta: 75, 
+                numDesc: "Pontuação Ponderada Total (Max: 100 pontos)", 
+                denDesc: "Base de 100 Pontos (Ponderação)", 
+                concept: "Média ponderada de quatro sub-indicadores de prevenção: Citopatológico (20%), Vacina HPV (30%), Consulta Mulher (30%) e Mamografia (20%) na população alvo.", 
+                criteria: ["Ótimo: >75%", "Bom: >50%", "Suficiente: >25%", "Regular: ≤25%"],
+                actionTipBase: "Crítico: Realizar busca ativa das mulheres em atraso. Organizar 'Dia D' de rastreamento e garantir que os exames sejam realizados e registrados nos sistemas de informação."
+            }
+        };
+
+        // --- MOCK INDICATOR TEMPLATES (eSB/eMulti - kept for other munis) ---
+        const getEsbIndicators = (baseScore) => ([
+            { cod: "C8", title: "Gestante Atendimento Odontológico", result: baseScore * 0.9, displayResult: (baseScore * 0.9).toFixed(2).replace('.', ',') + '%', meta: 60, status: baseScore * 0.9 >= 60 ? "Ótimo" : "Bom", num: 45, den: 50, numDesc: "Gestantes com 1ª consulta", denDesc: "Gestantes Vinculadas", concept: "Rastreamento odontológico no pré-natal.", criteria: ["Ótimo: >60%", "Bom: 40-60%", "Suficiente: 20-40%", "Regular: <20%"], action: "Manter foco no pré-natal odontológico.", color: STATUS_COLORS['Ótimo'].hex },
+            { cod: "C9", title: "1ª Consulta Odontológica (0-5 anos)", result: baseScore, displayResult: baseScore.toFixed(2).replace('.', ',') + '%', meta: 80, status: baseScore >= 80 ? "Ótimo" : "Bom", num: 160, den: 200, numDesc: "Crianças com 1ª consulta", denDesc: "Crianças 0-5 anos Vinculadas", concept: "Acesso precoce à saúde bucal.", criteria: ["Ótimo: >80%", "Bom: 60-80%", "Suficiente: 40-60%", "Regular: <40%"], action: "Intensificar busca ativa em escolas/creches.", color: STATUS_COLORS['Bom'].hex }
+        ]);
+
+        const getEmultiIndicators = (baseScore) => ([
+            { cod: "M1", title: "Apoio Matricial Ativo", result: baseScore, displayResult: baseScore.toFixed(2).replace('.', ',') + '%', meta: 70, status: baseScore >= 70 ? "Bom" : "Suficiente", num: 14, den: 20, numDesc: "Nº de Ações de Matriciamento", denDesc: "Nº Total de Ações Planejadas", concept: "Intervenções da eMulti em parceria com eSF.", criteria: ["Ótimo: >85%", "Bom: 70-85%", "Suficiente: 50-70%", "Regular: <50%"], action: "Aumentar frequência das reuniões de matriciamento.", color: STATUS_COLORS['Suficiente'].hex },
+            { cod: "M2", title: "Acomp. Crônicos (Grupos)", result: baseScore * 1.1, displayResult: (baseScore * 1.1).toFixed(2).replace('.', ',') + '%', meta: 85, status: baseScore * 1.1 >= 85 ? "Ótimo" : "Bom", num: 190, den: 220, numDesc: "Pacientes em Grupos Terapêuticos", denDesc: "Pacientes Ativos da eMulti", concept: "Monitoramento longitudinal de pacientes crônicos complexos.", criteria: ["Ótimo: >85%", "Bom: 70-85%", "Suficiente: 50-70%", "Regular: <50%"], action: "Ampliar oferta de grupos terapêuticos especializados.", color: STATUS_COLORS['Bom'].hex }
+        ]);
+        
+        // --- C7 COMPLEX CALCULATION LOGIC ---
+        function calculateC7(data) {
+            const isNewFormat = data.cervicalDen !== undefined;
+
+            let result_cervical, result_hpv, result_consultation, result_mammo;
+            let totalScore = 0;
+            let subScores = [];
+            
+            if (isNewFormat) {
+                result_cervical = (data.cervicalNum / data.cervicalDen) * 20; 
+                result_hpv = (data.hpvNum / data.hpvDen) * 30; 
+                result_consultation = (data.consultNum / data.consultDen) * 30; 
+                result_mammo = (data.mammoNum / data.mammoDen) * 20; 
+
+                totalScore = result_cervical + result_hpv + result_consultation + result_mammo;
+                
+                subScores = [
+                    { name: "Citopatológico (25-64)", num: data.cervicalNum, den: data.cervicalDen, weight: 20, score: result_cervical, displayScore: result_cervical.toFixed(2).replace('.', ',') + ' pts', status: classifyScore(result_cervical / 0.20, ESF_INDICATOR_METADATA.C7.criteria, 'SUB-C7') },
+                    { name: "Vacina HPV (9-14)", num: data.hpvNum, den: data.hpvDen, weight: 30, score: result_hpv, displayScore: result_hpv.toFixed(2).replace('.', ',') + ' pts', status: classifyScore(result_hpv / 0.30, ESF_INDICATOR_METADATA.C7.criteria, 'SUB-C7') },
+                    { name: "Consulta Mulher (14-69)", num: data.consultNum, den: data.consultDen, weight: 30, score: result_consultation, displayScore: result_consultation.toFixed(2).replace('.', ',') + ' pts', status: classifyScore(result_consultation / 0.30, ESF_INDICATOR_METADATA.C7.criteria, 'SUB-C7') },
+                    { name: "Mamografia (50-69)", num: data.mammoNum, den: data.mammoDen, weight: 20, score: result_mammo, displayScore: result_mammo.toFixed(2).replace('.', ',') + ' pts', status: classifyScore(result_mammo / 0.20, ESF_INDICATOR_METADATA.C7.criteria, 'SUB-C7') }
+                ];
+
+            } // else branch not needed as all current teams use the new format.
+
+            // The main C7 status classifies the totalScore out of 100.
+            const status = classifyScore(totalScore, ESF_INDICATOR_METADATA.C7.criteria, 'C7');
+
+            return {
+                result: totalScore, 
+                num: totalScore,
+                den: 100, 
+                status: status,
+                subScores: subScores,
+                c7Data: data
+            };
+        }
+
+        // --- CLASSIFICATION HELPER ---
+        function classifyScore(result, criteria, cod) {
+            let percentageValue = result;
+
+            // Lógica C1: Mais Acesso
+            if (cod === 'C1') { 
+                if (percentageValue > 50 && percentageValue <= 70) return 'Ótimo';
+                if (percentageValue > 30 && percentageValue <= 50) return 'Bom';
+                if (percentageValue > 10 && percentageValue <= 30) return 'Suficiente';
+                return 'Regular'; // Inclui resultados <= 10 e > 70 (desequilíbrio)
+            }
+            
+            // Lógica C2-C7 (e Global Score) - Lógica padrão:
+            if (percentageValue > 75) return 'Ótimo';
+            if (percentageValue > 50) return 'Bom';
+            if (percentageValue > 25) return 'Suficiente';
+            return 'Regular';
+        }
+
+        /**
+         * Calculates the result for C1-C6 as a factor or percentage.
+         */
+        function calculateIndicatorResult(cod, num, den) {
+             if (den === 0) return 0;
+             const rawResult = (num / den);
+             
+             // Nota: No mock, os indicadores C2-C6 já estão multiplicados por 100
+             if (cod === 'C1') {
+                 return rawResult * 100; // C1 is a percentage
+             } else if (['C2', 'C3', 'C4', 'C5', 'C6'].includes(cod)) {
+                 return rawResult; // C2-C6 are factors (e.g. 0.85)
+             }
+             
+             return rawResult; 
+        }
+
+        // --- CAMANDUCAIA ESF TEAMS DATA (Mock Data Re-calculated) ---
+        // (Mock numerical data for Camanducaia only for detailed breakdown)
+        const CENTRO_C7_DATA = { cervicalNum: 162, cervicalDen: 704, hpvNum: 25, hpvDen: 77, consultNum: 93, consultDen: 923, mammoNum: 42, mammoDen: 328 };
+        const CRUZEIRO_C7_DATA = { cervicalNum: 282, cervicalDen: 815, hpvNum: 69, hpvDen: 120, consultNum: 145, consultDen: 1107, mammoNum: 56, mammoDen: 345 };
+        const LOTEAMENTO_C1 = { num: 944, den: 2678 };
+        const LOTEAMENTO_C2 = { num: 80, den: 7 };
+        const LOTEAMENTO_C3 = { num: 534, den: 8 };
+        const LOTEAMENTO_C4 = { num: 21590, den: 297 };
+        const LOTEAMENTO_C5 = { num: 43925, den: 616 };
+        const LOTEAMENTO_C6 = { num: 36875, den: 614 };
+        const LOTEAMENTO_C7_DATA = { cervicalNum: 375, cervicalDen: 996, hpvNum: 114, hpvDen: 133, consultNum: 270, consultDen: 1325, mammoNum: 122, mammoDen: 413 };
+        const MONTE_VERDE_C1 = { num: 406, den: 2286 };
+        const MONTE_VERDE_C2 = { num: 1480, den: 21 };
+        const MONTE_VERDE_C3 = { num: 541, den: 13 };
+        const MONTE_VERDE_C4 = { num: 11385, den: 164 };
+        const MONTE_VERDE_C5 = { num: 26750, den: 363 };
+        const MONTE_VERDE_C6 = { num: 30475, den: 552 };
+        const MONTE_VERDE_C7_DATA = { cervicalNum: 287, cervicalDen: 967, hpvNum: 57, hpvDen: 132, consultNum: 47, consultDen: 1254, mammoNum: 58, mammoDen: 408 };
+        const PONTE_NOVA_C1 = { num: 532, den: 1243 };
+        const PONTE_NOVA_C2 = { num: 60, den: 7 };
+        const PONTE_NOVA_C3 = { num: 247, den: 6 };
+        const PONTE_NOVA_C4 = { num: 9235, den: 139 };
+        const PONTE_NOVA_C5 = { num: 21500, den: 347 };
+        const PONTE_NOVA_C6 = { num: 16925, den: 386 };
+        const PONTE_NOVA_C7_DATA = { cervicalNum: 142, cervicalDen: 621, hpvNum: 45, hpvDen: 109, consultNum: 48, consultDen: 816, mammoNum: 21, mammoDen: 259 };
+        const QUEDAS_VERDES_C1 = { num: 377, den: 1408 };
+        const QUEDAS_VERDES_C2 = { num: 200, den: 13 };
+        const QUEDAS_VERDES_C3 = { num: 355, den: 10 };
+        const QUEDAS_VERDES_C4 = { num: 11760, den: 186 };
+        const QUEDAS_VERDES_C5 = { num: 29575, den: 422 };
+        const QUEDAS_VERDES_C6 = { num: 26925, den: 472 };
+        const QUEDAS_VERDES_C7_DATA = { cervicalNum: 239, cervicalDen: 596, hpvNum: 47, hpvDen: 101, consultNum: 51, consultDen: 793, mammoNum: 83, mammoDen: 269 };
+        const SAO_MATEUS_C1 = { num: 475, den: 2848 };
+        const SAO_MATEUS_C2 = { num: 400, den: 10 };
+        const SAO_MATEUS_C3 = { num: 429, den: 9 };
+        const SAO_MATEUS_C4 = { num: 16670, den: 197 };
+        const SAO_MATEUS_C5 = { num: 35925, den: 455 };
+        const SAO_MATEUS_C6 = { num: 37125, den: 617 };
+        const SAO_MATEUS_C7_DATA = { cervicalNum: 168, cervicalDen: 655, hpvNum: 56, hpvDen: 99, consultNum: 76, consultDen: 845, mammoNum: 103, mammoDen: 336 };
+
+        const CAMANDUCAIA_ESF_NUMERICAL_DATA = {
+            "esf_centro": (() => {
+                const c1 = { num: 586, den: 2817 }; 
+                const c2 = { num: 120, den: 6 };
+                const c3 = { num: 138, den: 3 };
+                const c4 = { num: 11525, den: 164 };
+                const c5 = { num: 26525, den: 355 };
+                const c6 = { num: 32025, den: 543 };
+
+                const resultC1 = calculateIndicatorResult('C1', c1.num, c1.den); 
+                const resultC2 = calculateIndicatorResult('C2', c2.num, c2.den); 
+                const resultC3 = calculateIndicatorResult('C3', c3.num, c3.den);
+                const resultC4 = calculateIndicatorResult('C4', c4.num, c4.den);
+                const resultC5 = calculateIndicatorResult('C5', c5.num, c5.den);
+                const resultC6 = calculateIndicatorResult('C6', c6.num, c6.den);
+                const c7Result = calculateC7(CENTRO_C7_DATA);
+                
+                const indicators = [resultC1, resultC2, resultC3, resultC4, resultC5, resultC6, c7Result.result];
+                const score = indicators.reduce((a, b) => a + b, 0) / 7;
+
+                return {
+                    score: score, 
+                    classification: classifyScore(score, ["Ótimo: >75%"], 'GLOBAL'), 
+                    "C1": { num: c1.num, den: c1.den, result: resultC1, status: classifyScore(resultC1, ESF_INDICATOR_METADATA.C1.criteria, 'C1') },
+                    "C2": { num: c2.num, den: c2.den, result: resultC2, status: classifyScore(resultC2, ESF_INDICATOR_METADATA.C2.criteria, 'C2') },
+                    "C3": { num: c3.num, den: c3.den, result: resultC3, status: classifyScore(resultC3, ESF_INDICATOR_METADATA.C3.criteria, 'C3') }, 
+                    "C4": { num: c4.num, den: c4.den, result: resultC4, status: classifyScore(resultC4, ESF_INDICATOR_METADATA.C4.criteria, 'C4') },
+                    "C5": { num: c5.num, den: c5.den, result: resultC5, status: classifyScore(resultC5, ESF_INDICATOR_METADATA.C5.criteria, 'C5') },
+                    "C6": { num: c6.num, den: c6.den, result: resultC6, status: classifyScore(resultC6, ESF_INDICATOR_METADATA.C6.criteria, 'C6') }, 
+                    "C7": { ...c7Result }
+                };
+            })(),
+            "esf_cruzeiro": (() => {
+                const c1 = { num: 662, den: 2678 };
+                const c2 = { num: 300, den: 11 };
+                const c3 = { num: 195, den: 4 };
+                const c4 = { num: 16140, den: 204 };
+                const c5 = { num: 38875, den: 459 };
+                const c6 = { num: 41575, den: 641 };
+
+                const resultC1 = calculateIndicatorResult('C1', c1.num, c1.den); 
+                const resultC2 = calculateIndicatorResult('C2', c2.num, c2.den); 
+                const resultC3 = calculateIndicatorResult('C3', c3.num, c3.den);
+                const resultC4 = calculateIndicatorResult('C4', c4.num, c4.den);
+                const resultC5 = calculateIndicatorResult('C5', c5.num, c5.den);
+                const resultC6 = calculateIndicatorResult('C6', c6.num, c6.den);
+
+                const c7Result = calculateC7(CRUZEIRO_C7_DATA);
+                
+                const indicators = [resultC1, resultC2, resultC3, resultC4, resultC5, resultC6, c7Result.result];
+                const score = indicators.reduce((a, b) => a + b, 0) / 7;
+
+                return {
+                    score: score, 
+                    classification: classifyScore(score, ["Ótimo: >75%"], 'GLOBAL'), 
+                    "C1": { num: c1.num, den: c1.den, result: resultC1, status: classifyScore(resultC1, ESF_INDICATOR_METADATA.C1.criteria, 'C1') },
+                    "C2": { num: c2.num, den: c2.den, result: resultC2, status: classifyScore(resultC2, ESF_INDICATOR_METADATA.C2.criteria, 'C2') },
+                    "C3": { num: c3.num, den: c3.den, result: resultC3, status: classifyScore(resultC3, ESF_INDICATOR_METADATA.C3.criteria, 'C3') }, 
+                    "C4": { num: c4.num, den: c4.den, result: resultC4, status: classifyScore(resultC4, ESF_INDICATOR_METADATA.C4.criteria, 'C4') },
+                    "C5": { num: c5.num, den: c5.den, result: resultC5, status: classifyScore(resultC5, ESF_INDICATOR_METADATA.C5.criteria, 'C5') },
+                    "C6": { num: c6.num, den: c6.den, result: resultC6, status: classifyScore(resultC6, ESF_INDICATOR_METADATA.C6.criteria, 'C6') }, 
+                    "C7": { ...c7Result }
+                };
+            })(),
+            "esf_loteamento": (() => {
+                const resultC1 = calculateIndicatorResult('C1', LOTEAMENTO_C1.num, LOTEAMENTO_C1.den); 
+                const resultC2 = calculateIndicatorResult('C2', LOTEAMENTO_C2.num, LOTEAMENTO_C2.den); 
+                const resultC3 = calculateIndicatorResult('C3', LOTEAMENTO_C3.num, LOTEAMENTO_C3.den);
+                const resultC4 = calculateIndicatorResult('C4', LOTEAMENTO_C4.num, LOTEAMENTO_C4.den);
+                const resultC5 = calculateIndicatorResult('C5', LOTEAMENTO_C5.num, LOTEAMENTO_C5.den);
+                const resultC6 = calculateIndicatorResult('C6', LOTEAMENTO_C6.num, LOTEAMENTO_C6.den);
+                const c7Result = calculateC7(LOTEAMENTO_C7_DATA);
+                
+                const indicators = [resultC1, resultC2, resultC3, resultC4, resultC5, resultC6, c7Result.result];
+                const score = indicators.reduce((a, b) => a + b, 0) / 7;
+
+                return {
+                    score: score, 
+                    classification: classifyScore(score, ["Ótimo: >75%"], 'GLOBAL'), 
+                    "C1": { num: LOTEAMENTO_C1.num, den: LOTEAMENTO_C1.den, result: resultC1, status: classifyScore(resultC1, ESF_INDICATOR_METADATA.C1.criteria, 'C1') },
+                    "C2": { num: LOTEAMENTO_C2.num, den: LOTEAMENTO_C2.den, result: resultC2, status: classifyScore(resultC2, ESF_INDICATOR_METADATA.C2.criteria, 'C2') },
+                    "C3": { num: LOTEAMENTO_C3.num, den: LOTEAMENTO_C3.den, result: resultC3, status: classifyScore(resultC3, ESF_INDICATOR_METADATA.C3.criteria, 'C3') }, 
+                    "C4": { num: LOTEAMENTO_C4.num, den: LOTEAMENTO_C4.den, result: resultC4, status: classifyScore(resultC4, ESF_INDICATOR_METADATA.C4.criteria, 'C4') },
+                    "C5": { num: LOTEAMENTO_C5.num, den: LOTEAMENTO_C5.den, result: resultC5, status: classifyScore(resultC5, ESF_INDICATOR_METADATA.C5.criteria, 'C5') },
+                    "C6": { num: LOTEAMENTO_C6.num, den: LOTEAMENTO_C6.den, result: resultC6, status: classifyScore(resultC6, ESF_INDICATOR_METADATA.C6.criteria, 'C6') }, 
+                    "C7": { ...c7Result }
+                };
+            })(),
+            "esf_monte_verde": (() => {
+                 const resultC1 = calculateIndicatorResult('C1', MONTE_VERDE_C1.num, MONTE_VERDE_C1.den); 
+                const resultC2 = calculateIndicatorResult('C2', MONTE_VERDE_C2.num, MONTE_VERDE_C2.den); 
+                const resultC3 = calculateIndicatorResult('C3', MONTE_VERDE_C3.num, MONTE_VERDE_C3.den);
+                const resultC4 = calculateIndicatorResult('C4', MONTE_VERDE_C4.num, MONTE_VERDE_C4.den);
+                const resultC5 = calculateIndicatorResult('C5', MONTE_VERDE_C5.num, MONTE_VERDE_C5.den);
+                const resultC6 = calculateIndicatorResult('C6', MONTE_VERDE_C6.num, MONTE_VERDE_C6.den);
+                const c7Result = calculateC7(MONTE_VERDE_C7_DATA);
+                
+                const indicators = [resultC1, resultC2, resultC3, resultC4, resultC5, resultC6, c7Result.result];
+                const score = indicators.reduce((a, b) => a + b, 0) / 7;
+
+                return {
+                    score: score, 
+                    classification: classifyScore(score, ["Ótimo: >75%"], 'GLOBAL'), 
+                    "C1": { num: MONTE_VERDE_C1.num, den: MONTE_VERDE_C1.den, result: resultC1, status: classifyScore(resultC1, ESF_INDICATOR_METADATA.C1.criteria, 'C1') },
+                    "C2": { num: MONTE_VERDE_C2.num, den: MONTE_VERDE_C2.den, result: resultC2, status: classifyScore(resultC2, ESF_INDICATOR_METADATA.C2.criteria, 'C2') },
+                    "C3": { num: MONTE_VERDE_C3.num, den: MONTE_VERDE_C3.den, result: resultC3, status: classifyScore(resultC3, ESF_INDICATOR_METADATA.C3.criteria, 'C3') }, 
+                    "C4": { num: MONTE_VERDE_C4.num, den: MONTE_VERDE_C4.den, result: resultC4, status: classifyScore(resultC4, ESF_INDICATOR_METADATA.C4.criteria, 'C4') },
+                    "C5": { num: MONTE_VERDE_C5.num, den: MONTE_VERDE_C5.den, result: resultC5, status: classifyScore(resultC5, ESF_INDICATOR_METADATA.C5.criteria, 'C5') },
+                    "C6": { num: MONTE_VERDE_C6.num, den: MONTE_VERDE_C6.den, result: resultC6, status: classifyScore(resultC6, ESF_INDICATOR_METADATA.C6.criteria, 'C6') }, 
+                    "C7": { ...c7Result }
+                };
+            })(),
+            "esf_ponte_nova": (() => {
+                const c1 = { num: 532, den: 1243 };
+                const c2 = { num: 60, den: 7 };
+                const c3 = { num: 247, den: 6 };
+                const c4 = { num: 9235, den: 139 };
+                const c5 = { num: 21500, den: 347 };
+                const c6 = { num: 16925, den: 386 };
+
+                const resultC1 = calculateIndicatorResult('C1', c1.num, c1.den); 
+                const resultC2 = calculateIndicatorResult('C2', c2.num, c2.den); 
+                const resultC3 = calculateIndicatorResult('C3', c3.num, c3.den);
+                const resultC4 = calculateIndicatorResult('C4', c4.num, c4.den);
+                const resultC5 = calculateIndicatorResult('C5', c5.num, c5.den);
+                const resultC6 = calculateIndicatorResult('C6', c6.num, c6.den);
+                const c7Result = calculateC7(PONTE_NOVA_C7_DATA);
+                
+                const indicators = [resultC1, resultC2, resultC3, resultC4, resultC5, resultC6, c7Result.result];
+                const score = indicators.reduce((a, b) => a + b, 0) / 7;
+
+                return {
+                    score: score, 
+                    classification: classifyScore(score, ["Ótimo: >75%"], 'GLOBAL'), 
+                    "C1": { num: c1.num, den: c1.den, result: resultC1, status: classifyScore(resultC1, ESF_INDICATOR_METADATA.C1.criteria, 'C1') },
+                    "C2": { num: c2.num, den: c2.den, result: resultC2, status: classifyScore(resultC2, ESF_INDICATOR_METADATA.C2.criteria, 'C2') },
+                    "C3": { num: c3.num, den: c3.den, result: resultC3, status: classifyScore(resultC3, ESF_INDICATOR_METADATA.C3.criteria, 'C3') }, 
+                    "C4": { num: c4.num, den: c4.den, result: resultC4, status: classifyScore(resultC4, ESF_INDICATOR_METADATA.C4.criteria, 'C4') },
+                    "C5": { num: c5.num, den: c5.den, result: resultC5, status: classifyScore(resultC5, ESF_INDICATOR_METADATA.C5.criteria, 'C5') },
+                    "C6": { num: c6.num, den: c6.den, result: resultC6, status: classifyScore(resultC6, ESF_INDICATOR_METADATA.C6.criteria, 'C6') }, 
+                    "C7": { ...c7Result }
+                };
+            })(),
+            "esf_quedas_verdes": (() => {
+                 const c1 = { num: 377, den: 1408 };
+                const c2 = { num: 200, den: 13 };
+                const c3 = { num: 355, den: 10 };
+                const c4 = { num: 11760, den: 186 };
+                const c5 = { num: 29575, den: 422 };
+                const c6 = { num: 26925, den: 472 };
+
+                 const resultC1 = calculateIndicatorResult('C1', c1.num, c1.den); 
+                const resultC2 = calculateIndicatorResult('C2', c2.num, c2.den); 
+                const resultC3 = calculateIndicatorResult('C3', c3.num, c3.den);
+                const resultC4 = calculateIndicatorResult('C4', c4.num, c4.den);
+                const resultC5 = calculateIndicatorResult('C5', c5.num, c5.den);
+                const resultC6 = calculateIndicatorResult('C6', c6.num, c6.den);
+                const c7Result = calculateC7(QUEDAS_VERDES_C7_DATA);
+                
+                const indicators = [resultC1, resultC2, resultC3, resultC4, resultC5, resultC6, c7Result.result];
+                const score = indicators.reduce((a, b) => a + b, 0) / 7;
+
+                return {
+                    score: score, 
+                    classification: classifyScore(score, ["Ótimo: >75%"], 'GLOBAL'), 
+                    "C1": { num: c1.num, den: c1.den, result: resultC1, status: classifyScore(resultC1, ESF_INDICATOR_METADATA.C1.criteria, 'C1') },
+                    "C2": { num: c2.num, den: c2.den, result: resultC2, status: classifyScore(resultC2, ESF_INDICATOR_METADATA.C2.criteria, 'C2') },
+                    "C3": { num: c3.num, den: c3.den, result: resultC3, status: classifyScore(resultC3, ESF_INDICATOR_METADATA.C3.criteria, 'C3') }, 
+                    "C4": { num: c4.num, den: c4.den, result: resultC4, status: classifyScore(resultC4, ESF_INDICATOR_METADATA.C4.criteria, 'C4') },
+                    "C5": { num: c5.num, den: c5.den, result: resultC5, status: classifyScore(resultC5, ESF_INDICATOR_METADATA.C5.criteria, 'C5') },
+                    "C6": { num: c6.num, den: c6.den, result: resultC6, status: classifyScore(resultC6, ESF_INDICATOR_METADATA.C6.criteria, 'C6') }, 
+                    "C7": { ...c7Result }
+                };
+            })(),
+            "esf_sao_mateus": (() => {
+                 const c1 = { num: 475, den: 2848 };
+                const c2 = { num: 400, den: 10 };
+                const c3 = { num: 429, den: 9 };
+                const c4 = { num: 16670, den: 197 };
+                const c5 = { num: 35925, den: 455 };
+                const c6 = { num: 37125, den: 617 };
+
+                 const resultC1 = calculateIndicatorResult('C1', c1.num, c1.den); 
+                const resultC2 = calculateIndicatorResult('C2', c2.num, c2.den); 
+                const resultC3 = calculateIndicatorResult('C3', c3.num, c3.den);
+                const resultC4 = calculateIndicatorResult('C4', c4.num, c4.den);
+                const resultC5 = calculateIndicatorResult('C5', c5.num, c5.den);
+                const resultC6 = calculateIndicatorResult('C6', c6.num, c6.den);
+                const c7Result = calculateC7(SAO_MATEUS_C7_DATA);
+                
+                const indicators = [resultC1, resultC2, resultC3, resultC4, resultC5, resultC6, c7Result.result];
+                const score = indicators.reduce((a, b) => a + b, 0) / 7;
+
+                return {
+                    score: score, 
+                    classification: classifyScore(score, ["Ótimo: >75%"], 'GLOBAL'), 
+                    "C1": { num: c1.num, den: c1.den, result: resultC1, status: classifyScore(resultC1, ESF_INDICATOR_METADATA.C1.criteria, 'C1') },
+                    "C2": { num: c2.num, den: c2.den, result: resultC2, status: classifyScore(resultC2, ESF_INDICATOR_METADATA.C2.criteria, 'C2') },
+                    "C3": { num: c3.num, den: c3.den, result: resultC3, status: classifyScore(resultC3, ESF_INDICATOR_METADATA.C3.criteria, 'C3') }, 
+                    "C4": { num: c4.num, den: c4.den, result: resultC4, status: classifyScore(resultC4, ESF_INDICATOR_METADATA.C4.criteria, 'C4') },
+                    "C5": { num: c5.num, den: c5.den, result: resultC5, status: classifyScore(resultC5, ESF_INDICATOR_METADATA.C5.criteria, 'C5') },
+                    "C6": { num: c6.num, den: c6.den, result: resultC6, status: classifyScore(resultC6, ESF_INDICATOR_METADATA.C6.criteria, 'C6') }, 
+                    "C7": { ...c7Result }
+                };
+            })()
+        };
+
+        // --- HELPER FUNCTION TO GENERATE INDICATOR OBJECTS ---
+        function createEsfIndicator(cod, data) {
+            const meta = ESF_INDICATOR_METADATA[cod];
+            
+            let actionTip;
+            const actionBase = meta.actionTipBase;
+            const result = data.result;
+            const status = data.status;
+
+            if (status === 'Ótimo') actionTip = `Excelente desempenho! A recomendação é manter os processos e focar na manutenção da qualidade do registro. (${actionBase})`;
+            else if (status === 'Bom') actionTip = `Bom resultado. Para atingir o Ótimo, foque em ${meta.numDesc} nas próximas semanas. Ação detalhada: ${actionBase}`;
+            else if (status === 'Suficiente') actionTip = `Alerta Amarelo. Há fragilidade no processo de ${meta.title}. Recomenda-se uma intervenção imediata e foco no ${meta.numDesc}. Ação detalhada: ${actionBase}`;
+            else actionTip = `CRÍTICO! É necessário um Plano de Ação Imediato. Seu ${meta.numDesc} está muito abaixo. Ação prioritária: ${actionBase}`;
+            
+            if (cod === 'C7') {
+                 actionTip = `A pontuação total de ${result.toFixed(2).replace('.', ',')} pontos é uma média ponderada dos sub-indicadores de prevenção. Ação prioritária: ${actionBase}`;
+            }
+
+            const displaySuffix = (cod === 'C1') ? '%' : (cod === 'C7') ? ' pts' : ''; 
+            const numDisplay = result.toFixed(2); // Always show 2 decimals for consistency in the mock data display
+
+
+            return {
+                cod: cod,
+                title: meta.title,
+                result: result,
+                displayResult: numDisplay.replace('.', ',') + displaySuffix,
+                meta: meta.meta,
+                status: status,
+                num: data.num,
+                den: data.den,
+                numDesc: meta.numDesc,
+                denDesc: meta.denDesc,
+                concept: meta.concept,
+                criteria: meta.criteria,
+                action: actionTip,
+                color: STATUS_COLORS[status]?.hex,
+                subScores: data.subScores || null, 
+                c7Data: data.c7Data || null
+            };
+        }
+
+        // NOVO: Função para criar um conjunto simulado de 7 indicadores ESF/eAP
+        function createDummyEsfIndicators(globalScore) {
+            const indicators = [];
+            const codes = ["C1", "C2", "C3", "C4", "C5", "C6", "C7"];
+
+            // Fatores de dispersão para evitar um gráfico Radar perfeitamente plano
+            // Mantendo a média próxima do globalScore
+            const spread = [1.1, 0.9, 1.0, 1.2, 0.8, 1.05, 0.95];
+
+            codes.forEach((cod, index) => {
+                let baseResult = globalScore * spread[index] / 100;
+                
+                // Mapeia o resultado para o intervalo de 0-100 para o cálculo de status, mas permite o resultado interno ser maior para C2-C6 (que no mock detalhado são fatores)
+                let actualResult;
+                if (cod === 'C1') {
+                    // C1 tem uma lógica de classificação diferente, o resultado deve ser % (0-100)
+                    actualResult = Math.min(100, Math.max(0, globalScore * spread[index] * 1.0));
+                } else if (cod === 'C7') {
+                    // C7 é a pontuação total (0-100)
+                    actualResult = Math.min(100, Math.max(0, globalScore * spread[index] * 1.0));
+                } else {
+                    // C2-C6: usaremos o valor base (em decimal, e.g. 0.75) para simular o fator
+                    actualResult = Math.max(0, globalScore * spread[index] / 100); 
+                }
+
+                
+                // Mock do numerador/denominador para a memória de cálculo
+                const denMock = 100;
+                const numMock = Math.round((actualResult > 1 ? 1 : actualResult) * 100 * denMock) / 100; // Multiplica por 100 se for fator para parecer % de cobertura
+
+                // A classificação é feita na porcentagem equivalente
+                const classificationValue = cod === 'C1' ? actualResult : actualResult * 100;
+                const status = classifyScore(classificationValue, ESF_INDICATOR_METADATA[cod].criteria, cod);
+
+
+                indicators.push(createEsfIndicator(cod, { 
+                    num: numMock, 
+                    den: denMock, 
+                    result: actualResult * 100, // Passa o resultado como percentual/score para o dashboard
+                    status: status,
+                    subScores: cod === 'C7' ? [] : null 
+                }));
+            });
+
+            return indicators.sort((a, b) => a.cod.localeCompare(b.cod));
+        }
+
+        function getEsfIndicatorsData(teamId) {
+            const numericalData = CAMANDUCAIA_ESF_NUMERICAL_DATA[teamId];
+            if (!numericalData) return [];
+            
+            return [
+                createEsfIndicator("C1", numericalData["C1"]),
+                createEsfIndicator("C2", numericalData["C2"]),
+                createEsfIndicator("C3", numericalData["C3"]),
+                createEsfIndicator("C4", numericalData["C4"]),
+                createEsfIndicator("C5", numericalData["C5"]),
+                createEsfIndicator("C6", numericalData["C6"]),
+                createEsfIndicator("C7", numericalData["C7"]),
+            ].sort((a, b) => a.cod.localeCompare(b.cod));
+        }
+        
+        // --- DATA STORE (Refactored for Team Type) ---
+
+        // FUNÇÃO AUXILIAR PARA CRIAR DADOS MOCK ESF/EAP NO INIT
+        const createEsfMockDataForMun = (munId, teamKey, teamName, score, classification, population) => {
+            const isCamanducaia = munId === 'camanducaia';
+            
+            // Se for Camanducaia E os dados numéricos detalhados existirem, usa os detalhados
+            if (isCamanducaia && CAMANDUCAIA_ESF_NUMERICAL_DATA[teamKey]) {
+                const numericalData = CAMANDUCAIA_ESF_NUMERICAL_DATA[teamKey];
+                return {
+                    teamName,
+                    score: numericalData.score,
+                    classification: numericalData.classification,
+                    population,
+                    indicators: getEsfIndicatorsData(teamKey) 
+                };
+            }
+            
+            // Caso contrário (Outros Municípios ou Camanducaia sem dados detalhados), usa o mock simples
+            return {
+                teamName,
+                score,
+                classification,
+                population,
+                indicators: createDummyEsfIndicators(score) // Cria o mock de indicadores
+            };
+        };
+
+
+        const municipalityData = {
+            "camanducaia": {
+                name: "Camanducaia - MG",
+                password: '022025',
+                population: 18500,
+                defaultTeamType: "esf_eap",
+                teams: {
+                    "esf_eap": {
+                        // Camanducaia tem dados detalhados que serão usados na função getEsfIndicatorsData
+                        "esf_centro": createEsfMockDataForMun("camanducaia", "esf_centro", "eSF Centro", 70.2, "Bom", 3800),
+                        "esf_cruzeiro": createEsfMockDataForMun("camanducaia", "esf_cruzeiro", "eSF Cruzeiro", 65.5, "Bom", 1950),
+                        "esf_loteamento": createEsfMockDataForMun("camanducaia", "esf_loteamento", "eSF Loteamento", 55.0, "Bom", 2500), 
+                        "esf_monte_verde": createEsfMockDataForMun("camanducaia", "esf_monte_verde", "eSF Monte Verde", 78.1, "Ótimo", 2100), 
+                        "esf_ponte_nova": createEsfMockDataForMun("camanducaia", "esf_ponte_nova", "eSF Ponte Nova", 45.9, "Suficiente", 1800), 
+                        "esf_quedas_verdes": createEsfMockDataForMun("camanducaia", "esf_quedas_verdes", "eSF Quedas Verdes", 35.5, "Suficiente", 1500), 
+                        "esf_sao_mateus": createEsfMockDataForMun("camanducaia", "esf_sao_mateus", "eSF São Mateus", 72.8, "Bom", 2300)
+                    },
+                    "esb": { 
+                        "esb_cruzeiro": { teamName: "eSB Cruzeiro", score: 75.00, classification: "Bom", population: 3800, indicators: getEsbIndicators(80) },
+                        "esb_monte_verde": { teamName: "eSB Monte Verde", score: 92.00, classification: "Ótimo", population: 2100, indicators: getEsbIndicators(95) }
+                    },
+                    "emulti": { 
+                        "emulti_01": { teamName: "eMulti 01", score: 65.00, classification: "Suficiente", population: 10000, indicators: getEmultiIndicators(65) },
+                        "emulti_02": { teamName: "eMulti 02", score: 78.00, classification: "Bom", population: 8000, indicators: getEmultiIndicators(80) },
+                        "emulti_03": { teamName: "eMulti 03", score: 50.00, classification: "Suficiente", population: 5000, indicators: getEmultiIndicators(55) }
+                    }
+                }
+            },
+            // Simplified data for other municipalities (NOW USES createEsfMockDataForMun for consistency)
+            "cachoeira_de_minas": { 
+                name: "Cachoeira de Minas - MG", 
+                password: '012025', 
+                population: 11000, 
+                defaultTeamType: "esf_eap", 
+                teams: { 
+                    "esf_eap": { 
+                        "esf_cachoeira_i": createEsfMockDataForMun("cachoeira_de_minas", "esf_cachoeira_i", "eSF Cachoeira de Minas I", 85.5, "Ótimo", 2200) 
+                    }, 
+                    "esb": { "esb_cachoeira": { teamName: "eSB Cachoeira de Minas", score: 90.00, classification: "Ótimo", population: 2000, indicators: getEsbIndicators(90) } }, 
+                    "emulti": { "nasf_cachoeira": { teamName: "NASF Cachoeira de Minas", score: 80.00, classification: "Bom", population: 5000, indicators: getEmultiIndicators(80) } } 
+                } 
+            },
+            "corrego_do_bom_jesus": { 
+                name: "Córrego do Bom Jesus - MG", 
+                password: '032025', 
+                population: 4200, 
+                defaultTeamType: "esf_eap", 
+                teams: { 
+                    "esf_eap": { 
+                        "esf_central": createEsfMockDataForMun("corrego_do_bom_jesus", "esf_central", "eSF Central", 30.5, "Suficiente", 1500) 
+                    }, 
+                    "esb": { "esb_01": { teamName: "eSB 01", score: 40.00, classification: "Regular", population: 1500, indicators: getEsbIndicators(50) } }, 
+                    "emulti": { "emulti_01": { teamName: "eMulti Rural", score: 55.00, classification: "Suficiente", population: 2000, indicators: getEmultiIndicators(60) } } 
+                } 
+            },
+            "delfim_moreira": { 
+                name: "Delfim Moreira - MG", 
+                password: '042025', 
+                population: 8500, 
+                defaultTeamType: "esf_eap", 
+                teams: { 
+                    "esf_eap": { 
+                        "esf_central": createEsfMockDataForMun("delfim_moreira", "esf_central", "eSF Central", 95.0, "Ótimo", 3000) 
+                    }, 
+                    "esb": { "esb_01": { teamName: "eSB 01", score: 98.00, classification: "Ótimo", population: 3000, indicators: getEsbIndicators(98) } }, 
+                    "emulti": { "emulti_01": { teamName: "eMulti Sede", score: 90.00, classification: "Ótimo", population: 4000, indicators: getEmultiIndicators(90) } } 
+                } 
+            },
+            "itapeva": { 
+                name: "Itapeva - MG", 
+                password: '052025', 
+                population: 13000, 
+                defaultTeamType: "esf_eap", 
+                teams: { 
+                    "esf_eap": { 
+                        "esf_central": createEsfMockDataForMun("itapeva", "esf_central", "eSF Central", 55.0, "Bom", 2800) 
+                    }, 
+                    "esb": { "esb_01": { teamName: "eSB 01", score: 65.00, classification: "Bom", population: 3000, indicators: getEsbIndicators(70) } }, 
+                    "emulti": { "emulti_01": { teamName: "eMulti 01", score: 68.00, classification: "Suficiente", population: 5000, indicators: getEmultiIndicators(75) } } 
+                } 
+            },
+            "pedralva": { 
+                name: "Pedralva - MG", 
+                password: '062025', 
+                population: 11000, 
+                defaultTeamType: "esf_eap", 
+                teams: { 
+                    "esf_eap": { 
+                        "esf_sede": createEsfMockDataForMun("pedralva", "esf_sede", "eSF Sede", 70.0, "Bom", 2500) 
+                    }, 
+                    "esb": { "esb_01": { teamName: "eSB 01", score: 80.00, classification: "Bom", population: 2500, indicators: getEsbIndicators(85) } }, 
+                    "emulti": { "emulti_01": { teamName: "eMulti Rural", score: 75.00, classification: "Bom", population: 3000, indicators: getEmultiIndicators(80) } } 
+                } 
+            }
+        };
+
+        // --- GLOBAL STATE ---
+        let currentMunicipalityId = 'camanducaia';
+        let currentTeamType = 'esf_eap';
+        let currentTeamId = 'esf_centro';
+        let currentIncentiveProgram = 'cofinanciamento'; // NOVO ESTADO
+        let currentCofinanciamentoView = 'indicadores'; // NOVO ESTADO para a sub-seleção do Cofinanciamento
+        let pendingMunicipalityId = '';
+        let currentIndicatorIndex = 0;
+        let chartInstances = {};
+
+        // --- UTILS ---
+        function getActiveData() {
+            const munData = municipalityData[currentMunicipalityId];
+            if (!munData) return null;
+            
+            const teamTypeData = munData.teams[currentTeamType];
+            if (!teamTypeData) return null;
+
+            let teamData = teamTypeData[currentTeamId];
+            if (!teamData) {
+                const firstTeamId = Object.keys(teamTypeData)[0];
+                currentTeamId = firstTeamId;
+                teamData = teamTypeData[currentTeamId];
+            }
+            
+            // CORREÇÃO: A lógica de carregar indicadores detalhados/mock deve ser feita APENAS na criação
+            // da estrutura de dados (municipalityData). A função getActiveData apenas retorna os dados.
+            // A exceção é se a equipe não tem indicadores (o que não deve acontecer agora)
+            if (!teamData.indicators || teamData.indicators.length === 0) {
+                 return {
+                    ...munData,
+                    ...teamData,
+                    indicators: []
+                };
+            }
+            
+            return {
+                ...munData,
+                ...teamData,
+                indicators: teamData.indicators
+            };
+        }
+
+        function updateHeader(data) {
+            // REMOVEMOS 'Score Geral' do Header
+            const teamTypeLabel = document.getElementById('team-type-select').options[document.getElementById('team-type-select').selectedIndex].text;
+            const programLabel = document.getElementById('incentive-program-select').options[document.getElementById('incentive-program-select').selectedIndex].text;
+            
+            // Se o Cofinanciamento estiver ativo, ajusta o nome do programa para incluir a métrica
+            let programDisplay = programLabel;
+            if (currentIncentiveProgram === 'cofinanciamento') {
+                const metricLabel = document.getElementById('cofinanciamento-view-select').options[document.getElementById('cofinanciamento-view-select').selectedIndex].text;
+                programDisplay += ` (${metricLabel})`;
+            }
+            
+            document.getElementById('header-context').innerText = `Município: ${data.name} | Tipo: ${teamTypeLabel} | Equipe: ${data.teamName} • Q3/2025`;
+            document.getElementById('header-program-name').innerText = `Programa: ${programDisplay}`;
+            
+            const classificationElement = document.getElementById('header-classification');
+            const isCofinanciamento = currentIncentiveProgram === 'cofinanciamento';
+
+            if (isCofinanciamento && currentCofinanciamentoView !== 'indicadores') {
+                // Oculta a Classificação Geral para o Cofinanciamento Federal - exceto na view de Indicadores
+                classificationElement.classList.add('hidden');
+            } else {
+                // Mostra a Classificação para os outros programas (POEPS, PSE) ou na view de Indicadores
+                classificationElement.classList.remove('hidden');
+                classificationElement.innerText = `Classificação Geral: ${data.classification}`;
+                classificationElement.className = `text-xs font-medium ${STATUS_COLORS[data.classification]?.resultColor}`;
+            }
+            
+            // ... (atualização dos stats de C4, C5, C7, etc. - mantido)
+            const isESF = currentTeamType === 'esf_eap';
+            const i1 = data.indicators.find(i => i.cod === (isESF ? 'C4' : currentTeamType === 'esb' ? 'C8' : 'M1')) || {};
+            const i2 = data.indicators.find(i => i.cod === (isESF ? 'C5' : currentTeamType === 'esb' ? 'C9' : 'M2')) || {};
+            const i3 = data.indicators.find(i => i.cod === 'C7') || {}; 
+
+            document.getElementById('stat-c4-label').innerText = i1.title || `Score ${i1.cod || 'C4'}`;
+            document.getElementById('stat-c5-label').innerText = i2.title || `Score ${i2.cod || 'C5'}`;
+            document.getElementById('stat-c7-label').innerText = i3.title || `Score ${i3.cod || 'C7'}`;
+
+            document.getElementById('stat-c4').innerText = i1.displayResult || '--';
+            document.getElementById('stat-c5').innerText = i2.displayResult || '--';
+            document.getElementById('stat-c7').innerText = i3.displayResult || '--';
+            
+            const colorI3 = STATUS_COLORS[i3.status]?.resultColor || 'text-gray-800';
+            document.getElementById('stat-c7').className = `text-2xl sm:text-3xl font-bold ${colorI3} mt-1 sm:mt-2`;
+
+            // Controla a visibilidade do gráfico se estivermos em Cofinanciamento / Indicadores de Qualidade
+            const shouldShowCharts = currentTeamType === 'esf_eap' && (currentIncentiveProgram !== 'cofinanciamento' || currentCofinanciamentoView === 'indicadores');
+
+            if (shouldShowCharts) {
+                document.getElementById('charts-section').classList.remove('hidden');
+                document.getElementById('no-chart-message').classList.add('hidden');
+                initCharts(data.indicators);
+            } else {
+                if (chartInstances.barChart) chartInstances.barChart.destroy();
+                if (chartInstances.radarChart) chartInstances.radarChart.destroy();
+                document.getElementById('charts-section').classList.add('hidden');
+                document.getElementById('no-chart-message').classList.remove('hidden');
+            }
+            
+            // Controla a visibilidade dos cards de estatísticas (escondidos se for Vínculo/Acompanhamento, exceto se for ESF e o indicador for o correto)
+            const isIndicatorView = currentIncentiveProgram !== 'cofinanciamento' || currentCofinanciamentoView === 'indicadores';
+            const statsGrid = document.getElementById('stats-grid');
+            if (isIndicatorView) {
+                statsGrid.classList.remove('hidden');
+            } else {
+                statsGrid.classList.add('hidden');
+            }
+        }
+        
+        // --- NAVIGATION LOGIC ---
+        function switchView(viewName) {
+            // Esconde todas as views
+            document.getElementById('view-overview').classList.add('hidden');
+            document.getElementById('view-details').classList.add('hidden');
+            document.getElementById('view-methodology').classList.add('hidden');
+            document.getElementById('view-vinculo').classList.add('hidden'); // NEW VIEW
+            
+            // Determina a view real a ser mostrada
+            let viewToShow = viewName;
+            
+            if (currentIncentiveProgram === 'cofinanciamento' && currentCofinanciamentoView === 'vinculo') {
+                if (viewName === 'overview' || viewName === 'details') {
+                    viewToShow = 'vinculo'; // Redireciona Overview e Details para a view de Vínculo
+                }
+            }
+
+            const selectedView = document.getElementById(`view-${viewToShow}`);
+            selectedView.classList.remove('hidden');
+            selectedView.classList.add('fade-in');
+
+            // Atualiza os botões de navegação
+            document.querySelectorAll('aside nav a').forEach(item => {
+                item.classList.remove('bg-blue-50', 'text-blue-700');
+                item.classList.add('text-gray-600', 'hover:bg-gray-50');
+            });
+            
+            // Só destaca o botão se a view real corresponder ao clique, ou se for a view Vínculo (que usa os botões Overview/Details)
+            if (viewToShow !== 'vinculo') {
+                document.getElementById(`nav-${viewName}`).classList.add('bg-blue-50', 'text-blue-700');
+                document.getElementById(`nav-${viewName}`).classList.remove('text-gray-600', 'hover:bg-gray-50');
+            } else {
+                 // Quando está na view Vínculo, o botão "Visão Geral" deve ser o ativo
+                 document.getElementById('nav-overview').classList.add('bg-blue-50', 'text-blue-700');
+                 document.getElementById('nav-overview').classList.remove('text-gray-600', 'hover:bg-gray-50');
+            }
+
+
+            if (viewToShow === 'details') {
+                const data = getActiveData();
+                renderIndicatorNav();
+                loadIndicatorDetail(currentIndicatorIndex); 
+                document.getElementById('detail-team-name').innerText = data.teamName;
+            }
+            
+            // Força a atualização do header para o nome da métrica
+            renderDashboard();
+        }
+        
+        // --- AUTHENTICATION & SELECTION LOGIC ---
+        function handleMunicipalitySelection(municipalityId) {
+             // ... (lógica de autenticação mantida)
+             if (municipalityId === currentMunicipalityId) return;
+            
+            pendingMunicipalityId = municipalityId;
+            promptForPassword(municipalityData[municipalityId].name);
+        }
+
+        function promptForPassword(municipioName) {
+            // ... (lógica de modal de autenticação mantida)
+            const modal = document.getElementById('auth-modal');
+            const passwordInput = document.getElementById('municipio-password');
+            
+            document.getElementById('modal-municipio-name').innerText = municipioName;
+            passwordInput.value = '';
+            document.getElementById('auth-error').classList.add('hidden');
+            document.getElementById('municipality-select').disabled = true;
+            
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            modal.querySelector('.transform').classList.remove('scale-95');
+            passwordInput.focus();
+        }
+
+        function cancelAuth() {
+            // ... (lógica de cancelamento mantida)
+             const modal = document.getElementById('auth-modal');
+            
+            document.getElementById('municipality-select').value = currentMunicipalityId;
+
+            modal.querySelector('.transform').classList.add('scale-95');
+            modal.classList.add('opacity-0', 'pointer-events-none');
+            document.getElementById('municipality-select').disabled = false;
+            pendingMunicipalityId = '';
+        }
+
+        function attemptLogin() {
+            // ... (lógica de login mantida)
+             const enteredPassword = document.getElementById('municipio-password').value;
+            const dataToLoad = municipalityData[pendingMunicipalityId];
+            
+            if (dataToLoad && dataToLoad.password === enteredPassword) {
+                document.getElementById('auth-error').classList.add('hidden');
+                
+                currentMunicipalityId = pendingMunicipalityId;
+                currentTeamType = dataToLoad.defaultTeamType;
+                
+                document.getElementById('team-type-select').value = currentTeamType;
+
+                currentTeamId = Object.keys(dataToLoad.teams[currentTeamType])[0];
+                loadData(dataToLoad);
+                
+                const modal = document.getElementById('auth-modal');
+                modal.querySelector('.transform').classList.add('scale-95');
+                modal.classList.add('opacity-0', 'pointer-events-none');
+                document.getElementById('municipality-select').disabled = false;
+            } else {
+                document.getElementById('auth-error').classList.remove('hidden');
+                document.getElementById('municipio-password').value = '';
+                document.getElementById('municipio-password').focus();
+            }
+        }
+
+        function loadTeamType(teamType) {
+            // ... (lógica de troca de tipo de equipe mantida)
+            currentTeamType = teamType;
+            const munData = municipalityData[currentMunicipalityId];
+            if (!munData.teams[teamType] || Object.keys(munData.teams[teamType]).length === 0) {
+                currentTeamId = '';
+                populateTeamSelector({});
+            } else {
+                currentTeamId = Object.keys(munData.teams[teamType])[0];
+                populateTeamSelector(munData.teams[teamType]);
+            }
+            currentIndicatorIndex = 0;
+            renderDashboard();
+            switchView('overview');
+        }
+        
+        // NOVO: Função para o novo filtro de Cofinanciamento (Métrica)
+        function loadCofinanciamentoView(viewId) {
+            currentCofinanciamentoView = viewId;
+            renderDashboard();
+            // Redireciona a visualização principal
+            switchView('overview'); 
+        }
+
+        function loadIncentiveProgram(programId) {
+            currentIncentiveProgram = programId;
+            
+            const subSelectorDiv = document.getElementById('cofinanciamento-sub-selector');
+
+            if (programId === 'cofinanciamento') {
+                subSelectorDiv.classList.remove('hidden');
+                // Garante que a sub-seleção inicial seja 'indicadores' (ou a última selecionada)
+                document.getElementById('cofinanciamento-view-select').value = currentCofinanciamentoView;
+            } else {
+                subSelectorDiv.classList.add('hidden');
+                currentCofinanciamentoView = 'indicadores'; // Reset para o padrão
+            }
+            
+            renderDashboard();
+            switchView('overview');
+        }
+
+        function loadData(munData) {
+            // ... (lógica de carregamento de dados mantida)
+            // Certifica-se de que o seletor de tipo de equipe está correto para o novo município
+            document.getElementById('team-type-select').value = munData.defaultTeamType;
+            currentTeamType = munData.defaultTeamType;
+            
+            // Recarrega o seletor de equipes
+            populateTeamSelector(munData.teams[currentTeamType]);
+            currentTeamId = Object.keys(munData.teams[currentTeamType])[0];
+
+            currentIndicatorIndex = 0;
+            renderDashboard();
+            switchView('overview');
+        }
+
+        function loadTeam(teamId) {
+            // ... (lógica de troca de equipe mantida)
+            currentTeamId = teamId;
+            currentIndicatorIndex = 0;
+            renderDashboard();
+        }
+
+        function populateMunicipalitySelector() {
+            // ... (lógica de preenchimento de município mantida)
+            const select = document.getElementById('municipality-select');
+            select.innerHTML = '';
+            
+            Object.keys(municipalityData).forEach(id => {
+                const option = document.createElement('option');
+                option.value = id;
+                option.innerText = municipalityData[id].name;
+                select.appendChild(option);
+            });
+            select.value = currentMunicipalityId;
+        }
+
+        function populateTeamSelector(teams) {
+            // ... (lógica de preenchimento de equipe mantida)
+            const select = document.getElementById('team-select');
+            select.innerHTML = '';
+            
+            Object.keys(teams).forEach(id => {
+                const option = document.createElement('option');
+                option.value = id;
+                option.innerText = teams[id].teamName;
+                select.appendChild(option);
+            });
+            select.value = currentTeamId;
+        }
+
+        // --- DASHBOARD RENDERING ---
+        function renderDashboard() {
+            const data = getActiveData();
+            if (!data) return;
+
+            updateHeader(data);
+            
+            // A renderização de gráficos/detalhes só faz sentido se a view for "indicadores"
+            const isIndicatorViewActive = currentIncentiveProgram !== 'cofinanciamento' || currentCofinanciamentoView === 'indicadores';
+
+            if (isIndicatorViewActive && currentTeamType === 'esf_eap') {
+                 // A atualização do header chama initCharts
+            } else if (!isIndicatorViewActive) {
+                // Se for Vínculo/Acompanhamento, garante que os gráficos não tentem renderizar
+                if (chartInstances.barChart) chartInstances.barChart.destroy();
+                if (chartInstances.radarChart) chartInstances.radarChart.destroy();
+            }
+            
+            if (!document.getElementById('view-details').classList.contains('hidden')) {
+                // Só renderiza Detalhamento se a métrica correta estiver selecionada
+                if (isIndicatorViewActive) {
+                    renderIndicatorNav(); 
+                    loadIndicatorDetail(currentIndicatorIndex); 
+                }
+            }
+        }
+
+        function initCharts(indicators) {
+            const esfIndicators = indicators.filter(i => i.cod.startsWith('C') && i.cod !== 'C8' && i.cod !== 'C9');
+            
+            const labels = esfIndicators.map(i => i.cod);
+            const results = esfIndicators.map(i => {
+                // Para o gráfico, usamos o valor limitado a 100%
+                if (i.cod === 'C1' || i.cod === 'C7') return i.result;
+                return Math.min(100, i.result); 
+            });
+            
+            const trueResults = esfIndicators.map(i => i.result);
+            const metas = esfIndicators.map(i => i.cod === 'C1' ? 70 : i.meta); 
+            const colors = esfIndicators.map(i => i.color);
+
+            if (chartInstances.barChart) chartInstances.barChart.destroy();
+            if (chartInstances.radarChart) chartInstances.radarChart.destroy();
+
+            // Bar Chart (Results vs Meta)
+            const ctxBar = document.getElementById('barChart').getContext('2d');
+            chartInstances.barChart = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Resultado Alcançado',
+                            data: results, 
+                            backgroundColor: colors,
+                            borderRadius: 6,
+                        },
+                        {
+                            label: 'Meta Mínima (%)',
+                            data: metas,
+                            type: 'line',
+                            borderColor: '#6B7280',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const rawResult = trueResults[context.dataIndex];
+                                    const cod = labels[context.dataIndex];
+                                    let suffix = '';
+                                    if (cod === 'C1') suffix = '%';
+                                    else if (cod === 'C7') suffix = ' pts';
+                                    
+                                    return context.dataset.label + ': ' + rawResult.toFixed(2).replace('.', ',') + suffix;
+                                }
+                            }
+                        },
+                        // RÓTULO DE DADOS ADICIONADO CONFORME SOLICITADO
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            color: '#1F2937',
+                            font: {
+                                weight: 'bold',
+                                size: 12
+                            },
+                            formatter: (value, context) => {
+                                const rawResult = trueResults[context.dataIndex];
+                                const cod = labels[context.dataIndex];
+                                let suffix = '';
+                                if (cod === 'C1') suffix = '%';
+                                else if (cod === 'C7') suffix = ' pts';
+                                return rawResult.toFixed(1).replace('.', ',') + suffix;
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { 
+                            beginAtZero: true, 
+                            max: 100,
+                            title: {
+                                display: true,
+                                text: 'Escala de Performance (Máx. 100)'
+                            },
+                            // ... (lógica de linhas de grade C1 mantida)
+                            afterDataLimits: (scale) => {
+                                if (scale.chart.data.labels.includes('C1')) {
+                                    scale.options.max = 100;
+                                }
+                            },
+                            grid: {
+                                drawTicks: true,
+                                color: (context) => {
+                                    if (context.tick.value === 30) return 'rgba(16, 185, 129, 0.7)';
+                                    if (context.tick.value === 70) return 'rgba(239, 68, 68, 0.7)';
+                                    if (context.tick.value === 50) return 'rgba(59, 130, 246, 0.7)';
+                                    return 'rgba(209, 213, 219, 0.3)';
+                                },
+                                lineWidth: (context) => {
+                                    if (context.tick.value === 30 || context.tick.value === 70 || context.tick.value === 50) return 2;
+                                    return 1;
+                                },
+                                drawOnChartArea: true,
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Radar Chart (Balance) - (mantido)
+            const ctxRadar = document.getElementById('radarChart').getContext('2d');
+            chartInstances.radarChart = new Chart(ctxRadar, {
+                type: 'radar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Performance da Equipe (Máx. 100)',
+                        data: results,
+                        fill: true,
+                        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                        borderColor: 'rgb(59, 130, 246)',
+                        pointBackgroundColor: 'rgb(59, 130, 246)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgb(59, 130, 246)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            angleLines: { display: true },
+                            suggestedMin: 0,
+                            suggestedMax: 100,
+                            ticks: {
+                                callback: function(value, index, values) {
+                                     const cod = labels[index];
+                                     let suffix = '';
+                                     if (cod === 'C1') suffix = '%';
+                                     else if (cod === 'C7') suffix = ' pts';
+                                     return value + suffix;
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { position: 'bottom' },
+                    }
+                }
+            });
+        }
+        
+        // --- DETAILS VIEW LOGIC ---
+        function renderIndicatorNav() {
+            const data = getActiveData();
+            const container = document.getElementById('indicator-nav');
+            
+            container.innerHTML = '';
+            
+            data.indicators.forEach((ind, index) => {
+                // Ensure the active indicator is reset to the first one when switching types
+                // Not necessary to reset here, handled in loadTeam/loadTeamType
+                if (index === 0 && currentIndicatorIndex > data.indicators.length) currentIndicatorIndex = 0; 
+                // Fix: ensure the active index is within bounds of new loaded data
+                if (currentIndicatorIndex >= data.indicators.length) currentIndicatorIndex = 0;
+
+                const statusColor = STATUS_COLORS[ind.status];
+                const btn = document.createElement('button');
+                // TÍTULO SIMPLIFICADO AGORA VEM DO METADATA (e.g., "Mais Acesso")
+                btn.innerText = `${ind.cod} - ${ind.title}`; // Agora usa o título simplificado
+
+                btn.className = `flex-shrink-0 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium border transition-colors duration-200 ${
+                    index === currentIndicatorIndex ? 'bg-blue-600 text-white border-blue-600' : `${statusColor?.bg} ${statusColor?.text} border-gray-200 hover:bg-gray-50`
+                }`;
+                btn.onclick = (e) => {
+                    // Update active state visuals
+                    Array.from(container.children).forEach((child, i) => {
+                         const childData = data.indicators[i];
+                         const childStatusColor = STATUS_COLORS[childData.status];
+                        child.className = `flex-shrink-0 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium border transition-colors duration-200 ${childStatusColor?.bg} ${childStatusColor?.text} border-gray-200 hover:bg-gray-50`;
+                    });
+                    e.target.className = 'flex-shrink-0 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium border bg-blue-600 text-white border-blue-600';
+                    
+                    loadIndicatorDetail(index);
+                };
+                container.appendChild(btn);
+            });
+        }
+        
+        function loadIndicatorDetail(index) {
+            const activeData = getActiveData();
+            if (!activeData.indicators[index]) return; // Safeguard
+            
+            const data = activeData.indicators[index];
+            currentIndicatorIndex = index;
+
+            // Update Header
+            document.getElementById('detail-code').innerText = data.cod;
+            document.getElementById('detail-status').innerText = data.status;
+            document.getElementById('detail-status').className = `px-2 py-1 text-xs font-bold rounded ${STATUS_COLORS[data.status]?.bg} ${STATUS_COLORS[data.status]?.text}`;
+            // TÍTULO SIMPLIFICADO AGORA VEM DO METADATA (e.g., "Mais Acesso")
+            document.getElementById('detail-title').innerText = data.title;
+            // OBJETIVO REMOVIDO DO PAINEL DE DETALHES
+            
+            // Update Result Box: META REMOVIDA DEIXANDO APENAS RESULTADO E COR
+            document.getElementById('detail-result-big').innerText = data.displayResult;
+            document.getElementById('detail-result-big').className = `text-3xl sm:text-4xl font-extrabold ${STATUS_COLORS[data.status]?.resultColor}`;
+
+
+            // Update Math
+            const detailPanelContent = document.querySelector('#detail-panel .grid.grid-cols-1.md\\:grid-cols-2 > div:first-child');
+            detailPanelContent.innerHTML = '';
+
+            // Renderiza o detalhamento complexo C7 apenas para Camanducaia (que possui dados reais do mock)
+            if (data.cod === 'C7' && data.subScores && data.subScores.length > 0) {
+                 // RENDER C7 COMPLEX BREAKDOWN (Apenas para Camanducaia)
+                 let c7Html = `
+                    <h4 class="font-bold text-gray-800 flex items-center gap-2 mb-4 sm:mb-6">
+                        <span>🧮</span> Pontuação Ponderada (Max. 100 pts)
+                    </h4>
+                    <div class="space-y-4">
+                        ${data.subScores.map(sub => {
+                            // Uso das cores padrão para cada classificação do sub-indicador C7
+                            const statusColor = STATUS_COLORS[sub.status]?.resultColor;
+                            const statusBg = STATUS_COLORS[sub.status]?.bg;
+                            return `
+                                <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                                    <p class="text-xs font-bold uppercase mb-1 ${statusColor}">${sub.name}</p>
+                                    <p class="text-sm text-gray-700 mb-1">Cálculo: ${sub.num.toLocaleString('pt-BR')} / ${sub.den.toLocaleString('pt-BR')} * ${sub.weight}</p>
+                                    <p class="text-xl font-mono font-bold ${statusColor}">${sub.displayScore} (<span class="${statusBg} ${STATUS_COLORS[sub.status]?.text} px-1.5 rounded">${sub.status}</span>)</p>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                    <div class="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-100">
+                        <h5 class="font-semibold text-sm text-gray-900 mb-2">Pontuação Final</h5>
+                        <p class="text-xl font-bold ${STATUS_COLORS[data.status]?.resultColor}">${data.displayResult} (${data.status})</p>
+                        <p class="text-sm text-gray-600 leading-relaxed mt-2">
+                           O resultado final é a soma das pontuações de cada sub-indicador, totalizando 100 pontos.
+                        </p>
+                    </div>
+                 `;
+                 detailPanelContent.innerHTML = c7Html;
+                 detailPanelContent.classList.add('border-b', 'md:border-b-0', 'md:border-r');
+            } else {
+                 // RENDER STANDARD NUMERATOR/DENOMINATOR (Incluindo os mocks)
+                 const isHighFactor = ['C2', 'C3', 'C4', 'C5', 'C6'].includes(data.cod) && data.result > 100;
+                 const suffix = data.cod === 'C1' ? '%' : '';
+                 
+                 // Ajuste para exibição de fator/porcentagem no painel de memória de cálculo
+                 const numDisplayValue = data.num.toLocaleString('pt-BR', { maximumFractionDigits: data.cod === 'C1' ? 2 : 0 });
+                 const denDisplayValue = data.den.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+
+
+                 detailPanelContent.innerHTML = `
+                     <h4 class="font-bold text-gray-800 flex items-center gap-2 mb-4 sm:mb-6">
+                        <span>🧮</span> Memória de Cálculo
+                    </h4>
+                    <div class="space-y-4 sm:space-y-6">
+                        <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                            <p class="text-xs text-blue-600 uppercase font-semibold mb-1">Numerador</p>
+                            <p id="detail-num-desc" class="text-sm text-gray-700 mb-2">${data.numDesc}</p>
+                            <p id="detail-num-val" class="text-xl sm:text-2xl font-mono font-bold text-blue-800">${numDisplayValue}</p>
+                        </div>
+
+                        <div class="flex justify-center text-gray-400 font-bold text-xl">÷</div>
+
+                        <div class="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                            <p class="text-xs text-gray-500 uppercase font-semibold mb-1">Denominador</p>
+                            <p id="detail-den-desc" class="text-sm text-gray-700 mb-2">${data.denDesc}</p>
+                            <p id="detail-den-val" class="text-xl sm:text-2xl font-mono font-bold text-gray-800">${denDisplayValue}</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-100">
+                        <h5 class="font-semibold text-sm text-gray-900 mb-2">Interpretação do Resultado</h5>
+                        <p id="detail-interpretation" class="text-sm text-gray-600 leading-relaxed">
+                            ${isHighFactor ? 
+                                `⚠️ NOTA: O resultado de ${data.displayResult} é um fator (Numerador / Denominador), sem o multiplicador 100. Valores acima de 100 na escala de performance de 0-100 são incomuns e podem indicar que a métrica se refere à produtividade ou densidade, não à cobertura populacional. Por favor, verifique a Nota Metodológica para este indicador.`
+                                : data.status === 'Ótimo' ? "Excelente resultado. Continue monitorando para manter o padrão e ser referência."
+                                : data.status === 'Bom' ? `Bom resultado, mas foco contínuo pode levar à excelência.`
+                                : data.status === 'Suficiente' ? `Atenção: O resultado é suficiente mas indica fragilidade. Foco em melhorar o processo.`
+                                : `Crítico: O resultado está abaixo do aceitável. Ação imediata e plano de intervenção necessários.`
+                            }
+                        </p>
+                    </div>
+                 `;
+                 detailPanelContent.classList.add('border-b', 'md:border-b-0', 'md:border-r');
+            }
+
+
+            // Update Methodology (Right Panel) - (mantido)
+            document.getElementById('detail-concept').innerText = data.concept;
+            
+            const criteriaList = document.getElementById('detail-criteria');
+            criteriaList.innerHTML = '';
+            data.criteria.forEach(c => {
+                const li = document.createElement('li');
+                li.innerText = c;
+                if (c.includes(data.status)) li.className = `font-bold ${STATUS_COLORS[data.status]?.resultColor}`;
+                criteriaList.appendChild(li);
+            });
+
+            document.getElementById('detail-action').innerText = data.action;
+        }
+
+        // --- INITIALIZATION ---
+        window.onload = function() {
+            populateMunicipalitySelector();
+            
+            const camanducaiaData = municipalityData[currentMunicipalityId];
+            document.getElementById('team-type-select').value = camanducaiaData.defaultTeamType;
+
+            currentTeamType = camanducaiaData.defaultTeamType;
+            currentTeamId = Object.keys(camanducaiaData.teams[currentTeamType])[0];
+            populateTeamSelector(camanducaiaData.teams[currentTeamType]);
+            
+            // Inicializa o programa de incentivo
+            document.getElementById('incentive-program-select').value = currentIncentiveProgram;
+            // Garante que o sub-seletor de Cofinanciamento esteja visível se for o padrão inicial
+            if (currentIncentiveProgram === 'cofinanciamento') {
+                document.getElementById('cofinanciamento-sub-selector').classList.remove('hidden');
+                document.getElementById('cofinanciamento-view-select').value = currentCofinanciamentoView;
+            }
+
+
+            renderDashboard();
+            switchView('overview');
+            
+            // Carrega Chart.js Datalabels para o requisito de rótulo no gráfico de barras
+            const script = document.createElement('script');
+            script.src = "https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0";
+            script.onload = () => {
+                // Força a renderização do dashboard para que os gráficos sejam recriados com o plugin
+                renderDashboard();
+            };
+            document.head.appendChild(script);
+        };
+
+    </script>
+</body>
+</html>
